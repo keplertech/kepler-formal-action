@@ -23,7 +23,7 @@ if [ "$MODE" == "orfs" ]; then
 
     echo "::group::Launching-Najaeda"
     python3 /najaeda_scripts/count_leaves.py --primitives_mode="liberty" --liberty "$LIBERTY_FILE" --verilog "$VERILOG_FILE" 
-    cp /naja-run/design.stats /github/workspace/design.stats
+    cp design.stats /github/workspace/design.stats
     echo "::endgroup::"
 
     echo "Done!"
@@ -44,7 +44,7 @@ else
 
     echo "::group::Launching-Najaeda"
     python3 /najaeda_scripts/count_leaves.py --primitives_mode="xilinx" --verilog "$VERILOG_FILE"
-    cp /naja-run/design.stats /github/workspace/design.stats
+    cp design.stats /github/workspace/design.stats
     echo "::endgroup::"
 
     echo "Done!"
