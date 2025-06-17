@@ -31,3 +31,9 @@ jobs:
           mode: "direct"
           design_home: "benchs/vexriscv"
           design_config: "benchs/vexriscv/synth.ys"
+
+      - name: Upload design.stats
+        uses: actions/upload-artifact@v4
+        with:
+          name: design-stats
+          path: design.stats
