@@ -63,6 +63,7 @@ elif args.primitives_mode == PrimitivesMode.LIBERTY:
     netlist.load_liberty(liberty_files)
 
 top = netlist.load_verilog([args.verilog])
+netlist.apply_dle()
 
 def count_leaves(instance, leaves):
     if instance.is_leaf():
