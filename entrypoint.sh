@@ -5,6 +5,7 @@ ROOT="/github/workspace"
 MODE="$1"
 DESIGN_HOME="$2"
 DESIGN_CONFIG="$3"
+#LIBRARY="$4"
 
 export YOSYS_EXE="/yosys/bin/yosys"
 export DESIGN_HOME="$ROOT/$DESIGN_HOME"
@@ -13,11 +14,11 @@ export DESIGN_CONFIG="$ROOT/$DESIGN_CONFIG"
 if [ "$MODE" == "orfs" ]; then
     echo "::group::Naja-ORFS"
     echo "Naja ORFS mode selected"
-    LIBERTY_FILE="/najaeda-or/flow/objects/nangate45/bp/base/lib/*.lib"
-    VERILOG_FILE="/najaeda-or/flow/results/nangate45/bp/base/1_synth.v"
+    #LIBERTY_FILE="/najaeda-or/flow/objects/nangate45/bp/base/lib/*.lib"
+    #VERILOG_FILE="/najaeda-or/flow/results/nangate45/bp/base/1_synth.v"
     cd /najaeda-or/flow && make synth
-    echo "Liberty file: $LIBERTY_FILE"
-    echo "$(ls /najaeda-or/flow/objects/nangate45/bp/base/lib)"
+    #echo "Liberty file: $LIBERTY_FILE"
+    #echo "$(ls /najaeda-or/flow/objects/nangate45/bp/base/lib)"
     echo "Verilog file: $VERILOG_FILE"
     echo "::endgroup::"
 
