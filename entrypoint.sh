@@ -26,9 +26,13 @@ VERILOG_FILE="naja_netlist.v"
 echo "Verilog file: $VERILOG_FILE"
 echo "::endgroup::"
 
-echo "::group::Launching-Najaeda"
-python3 /najaeda_scripts/count_leaves.py --primitives_mode="xilinx" --verilog "$VERILOG_FILE"
-cp design.stats /github/workspace/design.stats
+echo "::group::Lauching-Kepler-Formal"
+$(KEPLER_FORMAL_EXE) -verilog naja_netlist.v naja_netlist.v
 echo "::endgroup::"
+
+#echo "::group::Launching-Najaeda"
+#python3 /najaeda_scripts/count_leaves.py --primitives_mode="xilinx" --verilog "$VERILOG_FILE"
+#cp design.stats /github/workspace/design.stats
+#echo "::endgroup::"
 
 echo "Done!"
