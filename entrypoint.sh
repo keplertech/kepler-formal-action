@@ -7,6 +7,7 @@ DESIGN_CONFIG="$2"
 #LIBRARY="$4"
 
 export YOSYS_EXE="/yosys/bin/yosys"
+export KEPLER_FORMAL_EXE="//"
 export DESIGN_HOME="$ROOT/$DESIGN_HOME"
 export DESIGN_CONFIG="$ROOT/$DESIGN_CONFIG"
 

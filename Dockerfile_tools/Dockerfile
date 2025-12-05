@@ -46,26 +46,39 @@ RUN git clone --recursive https://github.com/keplertech/kepler-formal
 WORKDIR /kepler-formal
 RUN cmake -DENABLE_UNIT_TESTS=OFF -DCMAKE_BUILD_TYPE=Release \
   -DCMAKE_CXX_FLAGS_RELEASE="-Ofast -march=native \
-  -ffast-math -flto" -DCMAKE_EXE_LINKER_FLAGS="-flto" .
+  -ffast-math -flto" -DCMAKE_EXE_LINKER_FLAGS="-flto" \
+  -DCMAKE_INSTALL_PREFIX=/kepler-formal-install \
+  .
 RUN make -j$(nproc)
+RUN make install
 
 FROM ubuntu:24.04 AS najaeda
-
+#
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     tcl8.6 \
 		make \
     time \
-    python3 python3-pip python3-venv
+    python3 python3-pip python3-venv \
+    python3-dev \
+    libcapnp-dev \
+    libtbb-dev
 
 COPY --from=builder /yosys-install /yosys
+COPY --from=builder /kepler-formal-install /kepler-formal
 
-# Create a virtual environment
-RUN python3 -m venv /opt/venv
+# Register /kepler-formal/lib as a dynamic linker search path
+RUN echo "/kepler-formal/lib" > /etc/ld.so.conf.d/kepler-formal.conf && \
+    ldconfig
 
-RUN /opt/venv/bin/pip install --upgrade pip \
- && /opt/venv/bin/pip install najaeda==0.3.0 \
- && /opt/venv/bin/pip install pyyaml
 
-# Add the venv to PATH
-ENV PATH="/opt/venv/bin:$PATH"
+#
+## Create a virtual environment
+#RUN python3 -m venv /opt/venv
+#
+#RUN /opt/venv/bin/pip install --upgrade pip \
+# && /opt/venv/bin/pip install najaeda==0.3.0 \
+# && /opt/venv/bin/pip install pyyaml
+#
+## Add the venv to PATH
+#ENV PATH="/opt/venv/bin:$PATH"
