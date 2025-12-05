@@ -1,21 +1,21 @@
-read_verilog vexriscv.demo.GenFull.v
-hierarchy -top vexriscv.demo.GenFull
+yosys read_verilog "$::env(DESIGN_HOME)/vexriscv.demo.GenFull.v"
+yosys hierarchy -top vexriscv.demo.GenFull
 
-proc
-proc_dff
-opt
-memory
-opt
-fsm
-opt
+yosys proc
+yosys proc_dff
+yosys opt
+yosys memory
+yosys opt
+yosys fsm
+yosys opt
 
 # Expand internal cell types into real explicit Verilog cells
-techmap
-simplemap
-opt_clean
+yosys techmap
+yosys simplemap
+yosys opt_clean
 
 # Generic synthesis
-synth -noabc -top vexriscv.demo.GenFull
+yosys synth -noabc -top vexriscv.demo.GenFull
 
 # Write purely structural Verilog:
-write_verilog -noexpr -nodec -attr2comment naja_netlist.v
+yosys write_verilog -noexpr -nodec -attr2comment naja_netlist.v
