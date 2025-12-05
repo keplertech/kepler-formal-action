@@ -1,5 +1,21 @@
-set design "$::env(DESIGN_HOME)/vexriscv.demo.GenFull.v"
-yosys -import
-read_verilog "$design"
-synth_xilinx -top vexriscv.demo.GenFull 
-write_verilog naja_netlist.v
+read_verilog vexriscv.demo.GenFull.v
+hierarchy -top vexriscv.demo.GenFull
+
+proc
+proc_dff
+opt
+memory
+opt
+fsm
+opt
+
+# Expand internal cell types into real explicit Verilog cells
+techmap
+simplemap
+opt_clean
+
+# Generic synthesis
+synth -noabc -top vexriscv.demo.GenFull
+
+# Write purely structural Verilog:
+write_verilog -noexpr -nodec -attr2comment naja_netlist.v
