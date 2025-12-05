@@ -14,8 +14,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     cmake \
     g++ \
     python3 \
-    flex \
+    python3-dev \
+    libfl-dev \
     bison \
+    libboost-dev \
+    libtbb-dev \
+    capnproto \
+    libcapnp-dev \
     unzip \
     wget && \
     apt-get clean && \
@@ -35,18 +40,14 @@ ENV YOSYS_PREFIX=/yosys-install/bin/
 RUN make -j$(nproc)
 RUN make install
 
-#get yosys synthesis env from https://github.com/The-OpenROAD-Project/OpenROAD-flow-scripts.git
-WORKDIR /or-scripts
-RUN wget https://github.com/The-OpenROAD-Project/OpenROAD-flow-scripts/archive/refs/heads/master.zip
-RUN unzip master.zip
-RUN mkdir najaeda-or
-RUN mkdir najaeda-or/flow
-RUN mkdir najaeda-or/flow/platforms
-RUN cp -R OpenROAD-flow-scripts-master/flow/platforms/common najaeda-or/flow/platforms/common
-RUN cp -R OpenROAD-flow-scripts-master/flow/platforms/nangate45 najaeda-or/flow/platforms/nangate45
-RUN cp -R OpenROAD-flow-scripts-master/flow/scripts najaeda-or/flow/scripts
-RUN cp -R OpenROAD-flow-scripts-master/flow/util najaeda-or/flow/util
-RUN cp -R OpenROAD-flow-scripts-master/flow/Makefile najaeda-or/flow/Makefile
+#get kepler formal
+WORKDIR /
+RUN git clone --recursive https://github.com/keplertech/kepler-formal
+WORKDIR /kepler-formal
+RUN cmake -DENABLE_UNIT_TESTS=OFF -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_CXX_FLAGS_RELEASE="-Ofast -march=native \
+  -ffast-math -flto" -DCMAKE_EXE_LINKER_FLAGS="-flto" .
+RUN make -j$(nproc)
 
 FROM ubuntu:24.04 AS najaeda
 
@@ -58,13 +59,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 python3-pip python3-venv
 
 COPY --from=builder /yosys-install /yosys
-COPY --from=builder /or-scripts/najaeda-or /najaeda-or
 
 # Create a virtual environment
 RUN python3 -m venv /opt/venv
 
 RUN /opt/venv/bin/pip install --upgrade pip \
- && /opt/venv/bin/pip install najaeda==0.1.21 \
+ && /opt/venv/bin/pip install najaeda==0.3.0 \
  && /opt/venv/bin/pip install pyyaml
 
 # Add the venv to PATH

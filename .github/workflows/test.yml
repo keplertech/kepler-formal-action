@@ -1,4 +1,4 @@
-name: "Test naja-action in orfs mode"
+name: "Test Kepler Formal Action"
 
 on:
   push:
@@ -25,9 +25,14 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Run naja-action
+      - name: Run keplertech formal action
         uses: ./.  # local composite action
         with:
-          mode: "orfs"
-          design_home: "benchs/black_parrot"
-          design_config: "benchs/black_parrot/config.mk"
+          design_home: "benchs/vexriscv"
+          design_config: "benchs/vexriscv/synth.ys"
+
+      - name: Upload design.stats
+        uses: actions/upload-artifact@v4
+        with:
+          name: design-stats
+          path: design.stats
