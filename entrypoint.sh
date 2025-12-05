@@ -27,7 +27,7 @@ echo "Verilog file: $VERILOG_FILE"
 echo "::endgroup::"
 
 echo "::group::Lauching-Kepler-Formal"
-$(KEPLER_FORMAL_EXE) -verilog naja_netlist.v naja_netlist.v
+$KEPLER_FORMAL_EXE -verilog naja_netlist.v naja_netlist.v
 echo "::endgroup::"
 
 #echo "::group::Launching-Najaeda"
