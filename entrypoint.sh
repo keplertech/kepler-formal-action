@@ -132,12 +132,19 @@ if [[ ! -f "$resolved_config" ]]; then
 fi
 
 echo "Config file: $resolved_config"
+cd "$workspace"
+echo "Execution directory: $(pwd)"
 echo "Running kepler-formal..."
 
 set +e
 "$tool_bin" --config "$resolved_config"
 exit_code=$?
 set -e
+
+if [[ "$exit_code" -eq 0 ]] && grep -Fq "Difference was found." "$log_file"; then
+  echo "kepler-formal reported a netlist difference; overriding exit code to fail the action."
+  exit_code=1
+fi
 
 if [[ "$exit_code" -eq 0 ]]; then
   status="success"

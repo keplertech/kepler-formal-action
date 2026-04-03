@@ -79,6 +79,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     bash \
     ca-certificates \
     python3 \
+    libpython3.10 \
     libboost-dev \
     libboost-iostreams-dev \
     capnproto \

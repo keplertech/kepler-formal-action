@@ -1,3 +1,3 @@
-module top(input a, input b, output y);
-  assign y = a & b;
+module top(input a, output y);
+  assign y = 1'b0;
 endmodule
