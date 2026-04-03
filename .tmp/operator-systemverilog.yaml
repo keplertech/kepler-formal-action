@@ -1,4 +1,0 @@
-format: systemverilog
-input_paths:
-  - testdata/verilog/operator-mismatch/latest/top.v
-  - testdata/verilog/operator-mismatch/reference/top.v
