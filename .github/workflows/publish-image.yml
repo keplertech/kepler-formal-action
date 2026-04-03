@@ -138,6 +138,12 @@ jobs:
             testdata/systemverilog/configs/operator-mismatch.yaml \
             .artifacts/publish/systemverilog-operator-mismatch
 
+          run_case \
+            systemverilog-complex-comb-mismatch \
+            failure \
+            testdata/systemverilog/configs/complex-comb-mismatch.yaml \
+            .artifacts/publish/systemverilog-complex-comb-mismatch
+
       - name: Upload release candidate artifacts
         if: always()
         uses: actions/upload-artifact@v4

@@ -122,6 +122,12 @@ jobs:
             testdata/systemverilog/configs/operator-mismatch.yaml \
             .artifacts/candidate/systemverilog-operator-mismatch
 
+          run_case \
+            systemverilog-complex-comb-mismatch \
+            failure \
+            testdata/systemverilog/configs/complex-comb-mismatch.yaml \
+            .artifacts/candidate/systemverilog-complex-comb-mismatch
+
       - name: Upload candidate image artifacts
         if: always()
         uses: actions/upload-artifact@v4

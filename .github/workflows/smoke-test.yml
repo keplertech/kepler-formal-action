@@ -78,3 +78,27 @@ jobs:
           name: systemverilog-operator-mismatch-artifacts
           path: .artifacts/systemverilog-operator-mismatch
           if-no-files-found: warn
+
+      - name: Complex SystemVerilog netlists should fail on combinational mismatch
+        id: systemverilog-complex-comb-mismatch
+        continue-on-error: true
+        uses: ./
+        with:
+          config-path: testdata/systemverilog/configs/complex-comb-mismatch.yaml
+          artifact-dir: .artifacts/systemverilog-complex-comb-mismatch
+
+      - name: Assert complex systemverilog combinational mismatch failure
+        if: always()
+        run: |
+          if [ "${{ steps.systemverilog-complex-comb-mismatch.outcome }}" != "failure" ]; then
+            echo "Expected the complex SystemVerilog fixture to fail on combinational mismatch." >&2
+            exit 1
+          fi
+
+      - name: Upload complex systemverilog mismatch artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: systemverilog-complex-comb-mismatch-artifacts
+          path: .artifacts/systemverilog-complex-comb-mismatch
+          if-no-files-found: warn

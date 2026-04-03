@@ -156,6 +156,7 @@ This repository organizes smoke fixtures by input format and keeps the netlist b
 - `testdata/verilog/cases/equivalent-basic/`: basic Verilog equivalence case
 - `testdata/verilog/cases/mismatch-basic/`: basic Verilog mismatch case
 - `testdata/systemverilog/cases/operator-mismatch-basic/`: SystemVerilog operator-style `|` versus `&` mismatch case
+- `testdata/systemverilog/cases/complex-comb-mismatch/`: richer SystemVerilog combinational datapath mismatch with multiple intermediate signals and conditional logic
 
 See `testdata/` for the fixture netlists and configs.
 
