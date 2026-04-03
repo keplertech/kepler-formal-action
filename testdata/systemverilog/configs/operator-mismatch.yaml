@@ -1,0 +1,4 @@
+format: systemverilog
+input_paths:
+  - testdata/systemverilog/cases/operator-mismatch-basic/latest/top.sv
+  - testdata/systemverilog/cases/operator-mismatch-basic/reference/top.sv

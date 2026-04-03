@@ -1,0 +1,4 @@
+format: verilog
+input_paths:
+  - testdata/verilog/cases/mismatch-basic/latest/top.v
+  - testdata/verilog/cases/mismatch-basic/reference/top.v

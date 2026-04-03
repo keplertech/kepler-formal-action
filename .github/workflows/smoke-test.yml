@@ -16,41 +16,65 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Equivalent netlists should pass
-        id: equivalent
+      - name: Verilog equivalent netlists should pass
+        id: verilog-equivalent
         uses: ./
         with:
-          config-path: testdata/configs/equivalent.yaml
-          artifact-dir: .artifacts/equivalent
+          config-path: testdata/verilog/configs/equivalent.yaml
+          artifact-dir: .artifacts/verilog-equivalent
 
-      - name: Upload equivalent artifacts
+      - name: Upload verilog equivalent artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: equivalent-artifacts
-          path: .artifacts/equivalent
+          name: verilog-equivalent-artifacts
+          path: .artifacts/verilog-equivalent
           if-no-files-found: warn
 
-      - name: Mismatching netlists should fail
-        id: mismatch
+      - name: Verilog mismatching netlists should fail
+        id: verilog-mismatch
         continue-on-error: true
         uses: ./
         with:
-          config-path: testdata/configs/mismatch.yaml
-          artifact-dir: .artifacts/mismatch
+          config-path: testdata/verilog/configs/mismatch.yaml
+          artifact-dir: .artifacts/verilog-mismatch
 
-      - name: Assert mismatch failure
+      - name: Assert verilog mismatch failure
         if: always()
         run: |
-          if [ "${{ steps.mismatch.outcome }}" != "failure" ]; then
+          if [ "${{ steps.verilog-mismatch.outcome }}" != "failure" ]; then
             echo "Expected the mismatching fixture to fail." >&2
             exit 1
           fi
 
-      - name: Upload mismatch artifacts
+      - name: Upload verilog mismatch artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: mismatch-artifacts
-          path: .artifacts/mismatch
+          name: verilog-mismatch-artifacts
+          path: .artifacts/verilog-mismatch
+          if-no-files-found: warn
+
+      - name: SystemVerilog operator-style netlists should fail on mismatch
+        id: systemverilog-operator-mismatch
+        continue-on-error: true
+        uses: ./
+        with:
+          config-path: testdata/systemverilog/configs/operator-mismatch.yaml
+          artifact-dir: .artifacts/systemverilog-operator-mismatch
+
+      - name: Assert systemverilog operator mismatch failure
+        if: always()
+        run: |
+          if [ "${{ steps.systemverilog-operator-mismatch.outcome }}" != "failure" ]; then
+            echo "Expected the SystemVerilog operator-style fixture to fail on mismatch." >&2
+            exit 1
+          fi
+
+      - name: Upload systemverilog operator mismatch artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: systemverilog-operator-mismatch-artifacts
+          path: .artifacts/systemverilog-operator-mismatch
           if-no-files-found: warn

@@ -134,10 +134,11 @@ The action image pins kepler-formal to a specific upstream commit SHA and builds
 
 ## Local validation in this repo
 
-This repository includes a smoke workflow that exercises two config-driven Verilog cases:
+This repository organizes smoke fixtures by input format and keeps the netlist bodies under format-specific `cases/` directories with explicit case names:
 
-- an equivalent pair that must pass
-- a mismatching pair that must fail while still producing artifacts
+- `testdata/verilog/cases/equivalent-basic/`: basic Verilog equivalence case
+- `testdata/verilog/cases/mismatch-basic/`: basic Verilog mismatch case
+- `testdata/systemverilog/cases/operator-mismatch-basic/`: SystemVerilog operator-style `|` versus `&` mismatch case
 
 See `testdata/` for the fixture netlists and configs.
 
