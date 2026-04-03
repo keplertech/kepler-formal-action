@@ -1,0 +1,56 @@
+name: smoke-test
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  smoke-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Equivalent netlists should pass
+        id: equivalent
+        uses: ./
+        with:
+          config-path: testdata/configs/equivalent.yaml
+          artifact-dir: .artifacts/equivalent
+
+      - name: Upload equivalent artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: equivalent-artifacts
+          path: .artifacts/equivalent
+          if-no-files-found: warn
+
+      - name: Mismatching netlists should fail
+        id: mismatch
+        continue-on-error: true
+        uses: ./
+        with:
+          config-path: testdata/configs/mismatch.yaml
+          artifact-dir: .artifacts/mismatch
+
+      - name: Assert mismatch failure
+        if: always()
+        run: |
+          if [ "${{ steps.mismatch.outcome }}" != "failure" ]; then
+            echo "Expected the mismatching fixture to fail." >&2
+            exit 1
+          fi
+
+      - name: Upload mismatch artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mismatch-artifacts
+          path: .artifacts/mismatch
+          if-no-files-found: warn
