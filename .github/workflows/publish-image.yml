@@ -1,0 +1,191 @@
+name: publish-image
+
+on:
+  push:
+    tags:
+      - v*.*.*
+  workflow_dispatch:
+    inputs:
+      image-tag:
+        description: Image tag to publish, for example v1.2.3-rc1.
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository_owner }}/kepler-formal-action
+
+jobs:
+  smoke-image:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    outputs:
+      image-version: ${{ steps.version.outputs.value }}
+      upstream-ref: ${{ steps.upstream-ref.outputs.value }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve image version
+        id: version
+        env:
+          MANUAL_TAG: ${{ github.event.inputs['image-tag'] || '' }}
+        run: |
+          set -euo pipefail
+
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            version="$GITHUB_REF_NAME"
+          elif [ -n "$MANUAL_TAG" ]; then
+            version="$MANUAL_TAG"
+          else
+            echo "workflow_dispatch requires image-tag." >&2
+            exit 1
+          fi
+
+          echo "value=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Resolve upstream kepler-formal ref
+        id: upstream-ref
+        run: |
+          set -euo pipefail
+          upstream_ref="$(grep '^ARG KEPLER_FORMAL_REF=' Dockerfile | cut -d= -f2-)"
+          echo "value=$upstream_ref" >> "$GITHUB_OUTPUT"
+
+      - name: Build release candidate image
+        env:
+          IMAGE_TAG: kepler-formal-action-release:${{ github.sha }}
+        run: |
+          set -euo pipefail
+
+          docker build -t "$IMAGE_TAG" .
+
+      - name: Smoke test release candidate image
+        env:
+          IMAGE_TAG: kepler-formal-action-release:${{ github.sha }}
+        run: |
+          set -euo pipefail
+
+          mkdir -p .tmp/publish .artifacts/publish
+          : > .tmp/publish/github_output
+          : > .tmp/publish/github_summary
+
+          cat > .artifacts/publish/build-metadata.txt <<EOF
+          image_tag=$IMAGE_TAG
+          image_version=${{ steps.version.outputs.value }}
+          kepler_formal_ref=${{ steps.upstream-ref.outputs.value }}
+          git_sha=${GITHUB_SHA}
+          EOF
+
+          run_case() {
+            local case_name="$1"
+            local expected="$2"
+            local config_path="$3"
+            local artifact_dir="$4"
+            local exit_code
+
+            set +e
+            docker run --rm \
+              -v "$PWD":/github/workspace \
+              -e GITHUB_WORKSPACE=/github/workspace \
+              -e GITHUB_OUTPUT=/github/workspace/.tmp/publish/github_output \
+              -e GITHUB_STEP_SUMMARY=/github/workspace/.tmp/publish/github_summary \
+              "$IMAGE_TAG" \
+              "$config_path" \
+              "$artifact_dir" \
+              true
+            exit_code=$?
+            set -e
+
+            case "$expected" in
+              success)
+                if [ "$exit_code" -ne 0 ]; then
+                  echo "Case $case_name was expected to succeed but exited with $exit_code." >&2
+                  return 1
+                fi
+                ;;
+              failure)
+                if [ "$exit_code" -eq 0 ]; then
+                  echo "Case $case_name was expected to fail but exited with 0." >&2
+                  return 1
+                fi
+                ;;
+              *)
+                echo "Unsupported expectation: $expected" >&2
+                return 1
+                ;;
+            esac
+          }
+
+          run_case \
+            verilog-equivalent \
+            success \
+            testdata/verilog/configs/equivalent.yaml \
+            .artifacts/publish/verilog-equivalent
+
+          run_case \
+            verilog-mismatch \
+            failure \
+            testdata/verilog/configs/mismatch.yaml \
+            .artifacts/publish/verilog-mismatch
+
+          run_case \
+            systemverilog-operator-mismatch \
+            failure \
+            testdata/systemverilog/configs/operator-mismatch.yaml \
+            .artifacts/publish/systemverilog-operator-mismatch
+
+      - name: Upload release candidate artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: publish-image-smoke-artifacts
+          path: |
+            .artifacts/publish
+            .tmp/publish
+          if-no-files-found: warn
+
+  publish:
+    needs: smoke-image
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Compute image tags
+        id: tags
+        run: |
+          set -euo pipefail
+
+          short_sha="${GITHUB_SHA::12}"
+          tags="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.smoke-image.outputs.image-version }},${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:sha-${short_sha}"
+
+          echo "value=$tags" >> "$GITHUB_OUTPUT"
+
+      - name: Build and publish image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.tags.outputs.value }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ needs.smoke-image.outputs.image-version }}
+            io.keplertech.kepler-formal.ref=${{ needs.smoke-image.outputs.upstream-ref }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

@@ -1,0 +1,133 @@
+name: candidate-image
+
+on:
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      kepler-formal-ref:
+        description: Optional kepler-formal commit SHA to test without editing Dockerfile.
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  candidate-image:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve kepler-formal ref
+        id: kepler-ref
+        env:
+          OVERRIDE_REF: ${{ github.event.inputs['kepler-formal-ref'] || '' }}
+        run: |
+          set -euo pipefail
+
+          if [ -n "$OVERRIDE_REF" ]; then
+            echo "value=$OVERRIDE_REF" >> "$GITHUB_OUTPUT"
+            echo "source=workflow-dispatch" >> "$GITHUB_OUTPUT"
+          else
+            default_ref="$(grep '^ARG KEPLER_FORMAL_REF=' Dockerfile | cut -d= -f2-)"
+            echo "value=$default_ref" >> "$GITHUB_OUTPUT"
+            echo "source=dockerfile" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build candidate image
+        env:
+          IMAGE_TAG: kepler-formal-action-candidate:${{ github.sha }}
+        run: |
+          set -euo pipefail
+
+          docker build \
+            --build-arg "KEPLER_FORMAL_REF=${{ steps.kepler-ref.outputs.value }}" \
+            -t "$IMAGE_TAG" \
+            .
+
+      - name: Smoke test candidate image
+        env:
+          IMAGE_TAG: kepler-formal-action-candidate:${{ github.sha }}
+        run: |
+          set -euo pipefail
+
+          mkdir -p .tmp/candidate .artifacts/candidate
+          : > .tmp/candidate/github_output
+          : > .tmp/candidate/github_summary
+
+          cat > .artifacts/candidate/build-metadata.txt <<EOF
+          image_tag=$IMAGE_TAG
+          kepler_formal_ref=${{ steps.kepler-ref.outputs.value }}
+          kepler_formal_ref_source=${{ steps.kepler-ref.outputs.source }}
+          git_sha=${GITHUB_SHA}
+          EOF
+
+          run_case() {
+            local case_name="$1"
+            local expected="$2"
+            local config_path="$3"
+            local artifact_dir="$4"
+            local exit_code
+
+            set +e
+            docker run --rm \
+              -v "$PWD":/github/workspace \
+              -e GITHUB_WORKSPACE=/github/workspace \
+              -e GITHUB_OUTPUT=/github/workspace/.tmp/candidate/github_output \
+              -e GITHUB_STEP_SUMMARY=/github/workspace/.tmp/candidate/github_summary \
+              "$IMAGE_TAG" \
+              "$config_path" \
+              "$artifact_dir" \
+              true
+            exit_code=$?
+            set -e
+
+            case "$expected" in
+              success)
+                if [ "$exit_code" -ne 0 ]; then
+                  echo "Case $case_name was expected to succeed but exited with $exit_code." >&2
+                  return 1
+                fi
+                ;;
+              failure)
+                if [ "$exit_code" -eq 0 ]; then
+                  echo "Case $case_name was expected to fail but exited with 0." >&2
+                  return 1
+                fi
+                ;;
+              *)
+                echo "Unsupported expectation: $expected" >&2
+                return 1
+                ;;
+            esac
+          }
+
+          run_case \
+            verilog-equivalent \
+            success \
+            testdata/verilog/configs/equivalent.yaml \
+            .artifacts/candidate/verilog-equivalent
+
+          run_case \
+            verilog-mismatch \
+            failure \
+            testdata/verilog/configs/mismatch.yaml \
+            .artifacts/candidate/verilog-mismatch
+
+          run_case \
+            systemverilog-operator-mismatch \
+            failure \
+            testdata/systemverilog/configs/operator-mismatch.yaml \
+            .artifacts/candidate/systemverilog-operator-mismatch
+
+      - name: Upload candidate image artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: candidate-image-artifacts
+          path: |
+            .artifacts/candidate
+            .tmp/candidate
+          if-no-files-found: warn

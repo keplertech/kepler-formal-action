@@ -132,6 +132,23 @@ For multi-file designs, use nested `input_paths` lists exactly as kepler-formal 
 
 The action image pins kepler-formal to a specific upstream commit SHA and builds it with the upstream CMake flow. The runtime image bundles the installed binary and required Naja shared libraries, and keeps the remaining runtime dependencies explicit in the image.
 
+## Candidate validation and GHCR release
+
+This repository now uses two container validation lanes in addition to the normal action smoke test:
+
+- `.github/workflows/smoke-test.yml` validates the action contract through `uses: ./`, which means GitHub builds the repository Dockerfile as part of the action run.
+- `.github/workflows/candidate-image.yml` builds a temporary image directly from the repository Dockerfile for pull requests and manual dispatch. Manual runs can override `KEPLER_FORMAL_REF` with a specific upstream commit SHA without editing the Dockerfile.
+- `.github/workflows/publish-image.yml` rebuilds and smoke-tests the committed image, then publishes it to `ghcr.io/<owner>/kepler-formal-action` on semantic version tags or manual dispatch.
+
+The published GHCR image is a release artifact in this first phase. The action itself still uses `image: Dockerfile` in `action.yml`, so `uses: keplertech/kepler-formal-action@v1` continues to build from repository source. That is a GitHub Actions limitation for Docker actions: the image source in `action.yml` is static and cannot be switched by an action input.
+
+Published images receive two immutable tags:
+
+- the requested release tag, for example `v1.2.3`
+- a commit-derived tag, for example `sha-abcdef123456`
+
+The workflow does not publish a mutable `latest` tag.
+
 ## Local validation in this repo
 
 This repository organizes smoke fixtures by input format and keeps the netlist bodies under format-specific `cases/` directories with explicit case names:
@@ -145,6 +162,7 @@ See `testdata/` for the fixture netlists and configs.
 ## Updating the embedded kepler-formal version
 
 1. Change `KEPLER_FORMAL_REF` in the Dockerfile to the upstream commit SHA you want to pin.
-2. Rebuild the action image.
-3. Re-run the smoke workflow.
-4. Update this README if runtime assumptions or supported formats changed.
+2. Re-run `.github/workflows/smoke-test.yml` to confirm the action still behaves correctly through `uses: ./`.
+3. Optionally run `.github/workflows/candidate-image.yml` with a `kepler-formal-ref` override if you want to validate a candidate upstream commit before changing the Dockerfile.
+4. After the change is merged, publish the release image through a semantic version tag or `.github/workflows/publish-image.yml` manual dispatch.
+5. Update this README if runtime assumptions or supported formats changed.
