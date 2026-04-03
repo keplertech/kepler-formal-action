@@ -1,0 +1,4 @@
+format: systemverilog
+input_paths:
+  - testdata/systemverilog/unsupported/cases/dff-async-reset/latest/top.sv
+  - testdata/systemverilog/unsupported/cases/dff-async-reset/reference/top.sv
