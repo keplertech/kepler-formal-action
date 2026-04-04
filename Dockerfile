@@ -1,7 +1,7 @@
 FROM ubuntu:22.04 AS builder
 
 ARG DEBIAN_FRONTEND=noninteractive
-ARG KEPLER_FORMAL_REF=4bbc293c4450bc559849bb675fed62cd136715d1
+ARG KEPLER_FORMAL_REF=origin/fix4
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \

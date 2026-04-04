@@ -79,6 +79,36 @@ jobs:
           path: .artifacts/systemverilog-operator-mismatch
           if-no-files-found: warn
 
+      - name: SystemVerilog synchronous DFF netlists should pass
+        id: systemverilog-dff-sync
+        uses: ./
+        with:
+          config-path: testdata/systemverilog/configs/dff-sync.yaml
+          artifact-dir: .artifacts/systemverilog-dff-sync
+
+      - name: Upload systemverilog synchronous DFF artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: systemverilog-dff-sync-artifacts
+          path: .artifacts/systemverilog-dff-sync
+          if-no-files-found: warn
+
+      - name: SystemVerilog async-reset DFF netlists should pass
+        id: systemverilog-dff-async-reset
+        uses: ./
+        with:
+          config-path: testdata/systemverilog/configs/dff-async-reset.yaml
+          artifact-dir: .artifacts/systemverilog-dff-async-reset
+
+      - name: Upload systemverilog async-reset DFF artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: systemverilog-dff-async-reset-artifacts
+          path: .artifacts/systemverilog-dff-async-reset
+          if-no-files-found: warn
+
       - name: Complex SystemVerilog netlists should fail on combinational mismatch
         id: systemverilog-complex-comb-mismatch
         continue-on-error: true

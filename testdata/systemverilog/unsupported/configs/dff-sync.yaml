@@ -1,4 +1,0 @@
-format: systemverilog
-input_paths:
-  - testdata/systemverilog/unsupported/cases/dff-sync/latest/top.sv
-  - testdata/systemverilog/unsupported/cases/dff-sync/reference/top.sv

@@ -130,14 +130,14 @@ For multi-file designs, use nested `input_paths` lists exactly as kepler-formal 
 
 ## Build strategy
 
-The action image pins kepler-formal to a specific upstream commit SHA and builds it with the upstream CMake flow. The runtime image bundles the installed binary and required Naja shared libraries, and keeps the remaining runtime dependencies explicit in the image.
+The action image builds kepler-formal from the upstream git ref configured in the Dockerfile. The runtime image bundles the installed binary and required Naja shared libraries, and keeps the remaining runtime dependencies explicit in the image.
 
 ## Candidate validation and GHCR release
 
 This repository now uses two container validation lanes in addition to the normal action smoke test:
 
 - `.github/workflows/smoke-test.yml` validates the action contract through `uses: ./`, which means GitHub builds the repository Dockerfile as part of the action run.
-- `.github/workflows/candidate-image.yml` builds a temporary image directly from the repository Dockerfile for pull requests and manual dispatch. Manual runs can override `KEPLER_FORMAL_REF` with a specific upstream commit SHA without editing the Dockerfile.
+- `.github/workflows/candidate-image.yml` builds a temporary image directly from the repository Dockerfile for pull requests and manual dispatch. Manual runs can override `KEPLER_FORMAL_REF` with a specific upstream git ref without editing the Dockerfile.
 - `.github/workflows/publish-image.yml` rebuilds and smoke-tests the committed image, then publishes it to `ghcr.io/<owner>/kepler-formal-action` on semantic version tags or manual dispatch.
 
 The published GHCR image is a release artifact in this first phase. The action itself still uses `image: Dockerfile` in `action.yml`, so `uses: keplertech/kepler-formal-action@v1` continues to build from repository source. That is a GitHub Actions limitation for Docker actions: the image source in `action.yml` is static and cannot be switched by an action input.
@@ -155,6 +155,8 @@ This repository organizes smoke fixtures by input format and keeps the netlist b
 
 - `testdata/verilog/cases/equivalent-basic/`: basic Verilog equivalence case
 - `testdata/verilog/cases/mismatch-basic/`: basic Verilog mismatch case
+- `testdata/systemverilog/cases/dff-sync/`: synchronous D flip-flop equivalence case
+- `testdata/systemverilog/cases/dff-async-reset/`: asynchronous reset D flip-flop equivalence case
 - `testdata/systemverilog/cases/operator-mismatch-basic/`: SystemVerilog operator-style `|` versus `&` mismatch case
 - `testdata/systemverilog/cases/complex-comb-mismatch/`: richer SystemVerilog combinational datapath mismatch with multiple intermediate signals and conditional logic
 
@@ -162,8 +164,9 @@ See `testdata/` for the fixture netlists and configs.
 
 ## Updating the embedded kepler-formal version
 
-1. Change `KEPLER_FORMAL_REF` in the Dockerfile to the upstream commit SHA you want to pin.
+1. Change `KEPLER_FORMAL_REF` in the Dockerfile to the upstream git ref you want to build.
 2. Re-run `.github/workflows/smoke-test.yml` to confirm the action still behaves correctly through `uses: ./`.
-3. Optionally run `.github/workflows/candidate-image.yml` with a `kepler-formal-ref` override if you want to validate a candidate upstream commit before changing the Dockerfile.
+3. Optionally run `.github/workflows/candidate-image.yml` with a `kepler-formal-ref` override if you want to validate a candidate upstream ref before changing the Dockerfile.
 4. After the change is merged, publish the release image through a semantic version tag or `.github/workflows/publish-image.yml` manual dispatch.
-5. Update this README if runtime assumptions or supported formats changed.
+5. For reproducible releases, replace branch names with a commit SHA before publishing.
+6. Update this README if runtime assumptions or supported formats changed.

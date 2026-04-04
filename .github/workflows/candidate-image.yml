@@ -5,7 +5,7 @@ on:
   workflow_dispatch:
     inputs:
       kepler-formal-ref:
-        description: Optional kepler-formal commit SHA to test without editing Dockerfile.
+        description: Optional kepler-formal git ref to test without editing Dockerfile.
         required: false
         type: string
 
@@ -121,6 +121,18 @@ jobs:
             failure \
             testdata/systemverilog/configs/operator-mismatch.yaml \
             .artifacts/candidate/systemverilog-operator-mismatch
+
+          run_case \
+            systemverilog-dff-sync \
+            success \
+            testdata/systemverilog/configs/dff-sync.yaml \
+            .artifacts/candidate/systemverilog-dff-sync
+
+          run_case \
+            systemverilog-dff-async-reset \
+            success \
+            testdata/systemverilog/configs/dff-async-reset.yaml \
+            .artifacts/candidate/systemverilog-dff-async-reset
 
           run_case \
             systemverilog-complex-comb-mismatch \
