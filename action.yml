@@ -1,5 +1,5 @@
 name: Kepler Formal Compare
-description: Run kepler-formal inside a Docker action against a caller-provided config file.
+description: Run kepler-formal through a published or locally built container against a caller-provided config file.
 inputs:
   config-path:
     description: Path to a kepler-formal YAML config file inside the checked-out workspace.
@@ -15,17 +15,26 @@ inputs:
 outputs:
   artifact-dir:
     description: Workspace-relative directory containing the generated action artifacts.
+    value: ${{ steps.run.outputs.artifact-dir }}
   exit-code:
     description: Exit code returned by kepler-formal.
+    value: ${{ steps.run.outputs.exit-code }}
   status:
     description: Final action status, success or failure.
+    value: ${{ steps.run.outputs.status }}
 runs:
-  using: docker
-  image: Dockerfile
-  args:
-    - ${{ inputs.config-path }}
-    - ${{ inputs.artifact-dir }}
-    - ${{ inputs.write-step-summary }}
+  using: composite
+  steps:
+    - id: run
+      shell: bash
+      env:
+        ACTION_PATH: ${{ github.action_path }}
+        ACTION_REF: ${{ github.action_ref }}
+        ACTION_REPOSITORY: ${{ github.action_repository }}
+        INPUT_ARTIFACT_DIR: ${{ inputs.artifact-dir }}
+        INPUT_CONFIG_PATH: ${{ inputs.config-path }}
+        INPUT_WRITE_STEP_SUMMARY: ${{ inputs.write-step-summary }}
+      run: bash "$ACTION_PATH/run-action.sh"
 branding:
   icon: activity
   color: blue

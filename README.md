@@ -1,6 +1,6 @@
 # kepler-formal-action
 
-Reusable Docker-based GitHub Action for running kepler-formal against two caller-prepared netlists in CI.
+Reusable GitHub Action for running kepler-formal against two caller-prepared netlists in CI.
 
 The action does not decide what latest and reference mean. The calling workflow prepares both netlists in the checked-out workspace, writes a kepler-formal YAML config that points at them, and then invokes this action with that config path.
 
@@ -128,24 +128,37 @@ input_paths:
 
 For multi-file designs, use nested `input_paths` lists exactly as kepler-formal expects.
 
-## Build strategy
+## Runtime strategy
 
 The action image builds kepler-formal from the upstream git ref configured in the Dockerfile. The runtime image bundles the installed binary and required Naja shared libraries, and keeps the remaining runtime dependencies explicit in the image.
+
+When the action is consumed from another repository, the wrapper pulls the published GHCR image that matches the action ref:
+
+- `uses: keplertech/kepler-formal-action@v1` pulls `ghcr.io/keplertech/kepler-formal-action:v1`
+- `uses: keplertech/kepler-formal-action@v1.2.3` pulls `ghcr.io/keplertech/kepler-formal-action:v1.2.3`
+- `uses: keplertech/kepler-formal-action@<published commit sha>` pulls `ghcr.io/keplertech/kepler-formal-action:sha-<first12>`
+
+Remote consumption should use a published release tag or a published commit SHA. Arbitrary branch refs do not have matching GHCR tags.
+
+When the action is used locally through `uses: ./`, it builds the repository Dockerfile on the runner and executes that local image. That keeps pull-request smoke tests validating the current Dockerfile instead of the last published release image.
 
 ## Candidate validation and GHCR release
 
 This repository now uses two container validation lanes in addition to the normal action smoke test:
 
-- `.github/workflows/smoke-test.yml` validates the action contract through `uses: ./`, which means GitHub builds the repository Dockerfile as part of the action run.
+- `.github/workflows/smoke-test.yml` validates the action contract through `uses: ./`, which makes the composite wrapper build and run the repository Dockerfile locally on the runner.
 - `.github/workflows/candidate-image.yml` builds a temporary image directly from the repository Dockerfile for pull requests and manual dispatch. Manual runs can override `KEPLER_FORMAL_REF` with a specific upstream git ref without editing the Dockerfile.
 - `.github/workflows/publish-image.yml` rebuilds and smoke-tests the committed image, then publishes it to `ghcr.io/<owner>/kepler-formal-action` on semantic version tags or manual dispatch.
 
-The published GHCR image is a release artifact in this first phase. The action itself still uses `image: Dockerfile` in `action.yml`, so `uses: keplertech/kepler-formal-action@v1` continues to build from repository source. That is a GitHub Actions limitation for Docker actions: the image source in `action.yml` is static and cannot be switched by an action input.
-
-Published images receive two immutable tags:
+Published images always receive these tags:
 
 - the requested release tag, for example `v1.2.3`
 - a commit-derived tag, for example `sha-abcdef123456`
+
+Stable semantic-version releases also receive floating compatibility tags:
+
+- the major tag, for example `v1`
+- the minor tag, for example `v1.2`
 
 The workflow does not publish a mutable `latest` tag.
 

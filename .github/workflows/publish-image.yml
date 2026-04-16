@@ -174,13 +174,24 @@ jobs:
 
       - name: Compute image tags
         id: tags
+        env:
+          IMAGE_VERSION: ${{ needs.smoke-image.outputs.image-version }}
         run: |
           set -euo pipefail
 
           short_sha="${GITHUB_SHA::12}"
-          tags="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.smoke-image.outputs.image-version }},${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:sha-${short_sha}"
+          version="$IMAGE_VERSION"
+          tags=(
+            "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${version}"
+            "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:sha-${short_sha}"
+          )
 
-          echo "value=$tags" >> "$GITHUB_OUTPUT"
+          if [[ "$version" =~ ^v([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
+            tags+=("${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:v${BASH_REMATCH[1]}")
+            tags+=("${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:v${BASH_REMATCH[1]}.${BASH_REMATCH[2]}")
+          fi
+
+          echo "value=$(IFS=,; echo "${tags[*]}")" >> "$GITHUB_OUTPUT"
 
       - name: Build and publish image
         uses: docker/build-push-action@v6
