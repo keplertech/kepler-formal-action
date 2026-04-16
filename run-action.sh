@@ -6,6 +6,20 @@ lower() {
   printf '%s' "$1" | tr '[:upper:]' '[:lower:]'
 }
 
+try_login_ghcr() {
+  local actor="${GITHUB_ACTOR:-}"
+  local token="${GITHUB_TOKEN:-}"
+
+  if [[ -z "$actor" || -z "$token" ]]; then
+    return 0
+  fi
+
+  echo "Logging in to ghcr.io as $actor before pulling the action image" >&2
+  if ! printf '%s\n' "$token" | docker login ghcr.io -u "$actor" --password-stdin >&2; then
+    echo "GHCR login failed; retrying the pull anonymously." >&2
+  fi
+}
+
 resolve_remote_image() {
   local action_repository="$1"
   local action_ref="$2"
@@ -14,7 +28,7 @@ resolve_remote_image() {
   if [[ "$action_ref" =~ ^[0-9a-fA-F]{40}$ ]]; then
     image_tag="sha-${action_ref:0:12}"
   elif [[ "$action_ref" == *"/"* ]]; then
-    echo "Remote use only supports published release tags or published commit SHAs. Ref '$action_ref' cannot be mapped to a GHCR tag." >&2
+    echo "Remote use only supports main, published tags, or published commit SHAs. Ref '$action_ref' cannot be mapped to a GHCR tag." >&2
     return 1
   else
     image_tag="$action_ref"
@@ -80,7 +94,22 @@ main() {
   if [[ -n "$action_repository" && -n "$action_ref" ]]; then
     image_ref="$(resolve_remote_image "$action_repository" "$action_ref")"
     echo "Pulling published action image $image_ref" >&2
-    docker pull "$image_ref" >&2
+    try_login_ghcr
+    if ! docker pull "$image_ref" >&2; then
+      cat >&2 <<EOF
+Failed to pull published action image $image_ref.
+
+Remote use expects a published GHCR image tag that matches the action ref.
+Supported refs in this repository are:
+- main
+- published release tags such as v1 or v1.2.3
+- published commit SHAs
+
+If you used a different branch ref, publish a matching image tag first or switch to main, a release tag, or a published commit SHA.
+If the GHCR package is private, either make it public or grant the caller repository read access and packages:read permission.
+EOF
+      return 1
+    fi
   else
     image_ref="$(build_local_image "$action_path")"
   fi

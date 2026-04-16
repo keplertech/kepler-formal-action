@@ -2,6 +2,8 @@ name: publish-image
 
 on:
   push:
+    branches:
+      - main
     tags:
       - v*.*.*
   workflow_dispatch:
@@ -39,10 +41,12 @@ jobs:
 
           if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
             version="$GITHUB_REF_NAME"
+          elif [ "${GITHUB_REF_NAME}" = "main" ]; then
+            version="main"
           elif [ -n "$MANUAL_TAG" ]; then
             version="$MANUAL_TAG"
           else
-            echo "workflow_dispatch requires image-tag." >&2
+            echo "Unsupported publish trigger. Use main, a semantic version tag, or workflow_dispatch with image-tag." >&2
             exit 1
           fi
 

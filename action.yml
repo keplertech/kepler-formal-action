@@ -31,6 +31,8 @@ runs:
         ACTION_PATH: ${{ github.action_path }}
         ACTION_REF: ${{ github.action_ref }}
         ACTION_REPOSITORY: ${{ github.action_repository }}
+        GITHUB_ACTOR: ${{ github.actor }}
+        GITHUB_TOKEN: ${{ github.token }}
         INPUT_ARTIFACT_DIR: ${{ inputs.artifact-dir }}
         INPUT_CONFIG_PATH: ${{ inputs.config-path }}
         INPUT_WRITE_STEP_SUMMARY: ${{ inputs.write-step-summary }}

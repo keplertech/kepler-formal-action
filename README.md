@@ -134,11 +134,14 @@ The action image builds kepler-formal from the upstream git ref configured in th
 
 When the action is consumed from another repository, the wrapper pulls the published GHCR image that matches the action ref:
 
+- `uses: keplertech/kepler-formal-action@main` pulls `ghcr.io/keplertech/kepler-formal-action:main`
 - `uses: keplertech/kepler-formal-action@v1` pulls `ghcr.io/keplertech/kepler-formal-action:v1`
 - `uses: keplertech/kepler-formal-action@v1.2.3` pulls `ghcr.io/keplertech/kepler-formal-action:v1.2.3`
 - `uses: keplertech/kepler-formal-action@<published commit sha>` pulls `ghcr.io/keplertech/kepler-formal-action:sha-<first12>`
 
-Remote consumption should use a published release tag or a published commit SHA. Arbitrary branch refs do not have matching GHCR tags.
+Remote consumption should use `main`, a published release tag, or a published commit SHA. Arbitrary branch refs still do not have matching GHCR tags.
+
+If you want other repositories to pull the GHCR image anonymously, set the package visibility to `Public` in GitHub Packages. GHCR packages are private on first publish by default. If you keep the package private, grant the caller repository read access to the package and ensure its workflow token has `packages: read`.
 
 When the action is used locally through `uses: ./`, it builds the repository Dockerfile on the runner and executes that local image. That keeps pull-request smoke tests validating the current Dockerfile instead of the last published release image.
 
@@ -148,11 +151,11 @@ This repository now uses two container validation lanes in addition to the norma
 
 - `.github/workflows/smoke-test.yml` validates the action contract through `uses: ./`, which makes the composite wrapper build and run the repository Dockerfile locally on the runner.
 - `.github/workflows/candidate-image.yml` builds a temporary image directly from the repository Dockerfile for pull requests and manual dispatch. Manual runs can override `KEPLER_FORMAL_REF` with a specific upstream git ref without editing the Dockerfile.
-- `.github/workflows/publish-image.yml` rebuilds and smoke-tests the committed image, then publishes it to `ghcr.io/<owner>/kepler-formal-action` on semantic version tags or manual dispatch.
+- `.github/workflows/publish-image.yml` rebuilds and smoke-tests the committed image, then publishes it to `ghcr.io/<owner>/kepler-formal-action` on pushes to `main`, on semantic version tags, or by manual dispatch.
 
 Published images always receive these tags:
 
-- the requested release tag, for example `v1.2.3`
+- the requested publish tag, for example `main` or `v1.2.3`
 - a commit-derived tag, for example `sha-abcdef123456`
 
 Stable semantic-version releases also receive floating compatibility tags:
