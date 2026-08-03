@@ -4,8 +4,8 @@ on:
   pull_request:
   workflow_dispatch:
     inputs:
-      kepler-formal-ref:
-        description: Optional kepler-formal git ref to test without editing Dockerfile.
+      kepler-formal-commit:
+        description: Optional kepler-formal git ref or commit hash to test without editing Dockerfile.
         required: false
         type: string
 
@@ -20,19 +20,19 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Resolve kepler-formal ref
-        id: kepler-ref
+      - name: Resolve kepler-formal commit
+        id: kepler-commit
         env:
-          OVERRIDE_REF: ${{ github.event.inputs['kepler-formal-ref'] || '' }}
+          OVERRIDE_COMMIT: ${{ github.event.inputs['kepler-formal-commit'] || '' }}
         run: |
           set -euo pipefail
 
-          if [ -n "$OVERRIDE_REF" ]; then
-            echo "value=$OVERRIDE_REF" >> "$GITHUB_OUTPUT"
+          if [ -n "$OVERRIDE_COMMIT" ]; then
+            echo "value=$OVERRIDE_COMMIT" >> "$GITHUB_OUTPUT"
             echo "source=workflow-dispatch" >> "$GITHUB_OUTPUT"
           else
-            default_ref="$(grep '^ARG KEPLER_FORMAL_REF=' Dockerfile | cut -d= -f2-)"
-            echo "value=$default_ref" >> "$GITHUB_OUTPUT"
+            default_commit="$(grep '^ARG KEPLER_FORMAL_COMMIT=' Dockerfile | cut -d= -f2-)"
+            echo "value=$default_commit" >> "$GITHUB_OUTPUT"
             echo "source=dockerfile" >> "$GITHUB_OUTPUT"
           fi
 
@@ -43,7 +43,7 @@ jobs:
           set -euo pipefail
 
           docker build \
-            --build-arg "KEPLER_FORMAL_REF=${{ steps.kepler-ref.outputs.value }}" \
+            --build-arg "KEPLER_FORMAL_COMMIT=${{ steps.kepler-commit.outputs.value }}" \
             -t "$IMAGE_TAG" \
             .
 
@@ -59,8 +59,8 @@ jobs:
 
           cat > .artifacts/candidate/build-metadata.txt <<EOF
           image_tag=$IMAGE_TAG
-          kepler_formal_ref=${{ steps.kepler-ref.outputs.value }}
-          kepler_formal_ref_source=${{ steps.kepler-ref.outputs.source }}
+          kepler_formal_commit=${{ steps.kepler-commit.outputs.value }}
+          kepler_formal_commit_source=${{ steps.kepler-commit.outputs.source }}
           git_sha=${GITHUB_SHA}
           EOF
 

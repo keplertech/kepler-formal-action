@@ -150,7 +150,7 @@ When the action is used locally through `uses: ./`, it builds the repository Doc
 This repository now uses two container validation lanes in addition to the normal action smoke test:
 
 - `.github/workflows/smoke-test.yml` validates the action contract through `uses: ./`, which makes the composite wrapper build and run the repository Dockerfile locally on the runner.
-- `.github/workflows/candidate-image.yml` builds a temporary image directly from the repository Dockerfile for pull requests and manual dispatch. Manual runs can override `KEPLER_FORMAL_REF` with a specific upstream git ref without editing the Dockerfile.
+- `.github/workflows/candidate-image.yml` builds a temporary image directly from the repository Dockerfile for pull requests and manual dispatch. Manual runs can override `KEPLER_FORMAL_COMMIT` with a specific upstream git ref or commit hash without editing the Dockerfile.
 - `.github/workflows/publish-image.yml` rebuilds and smoke-tests the committed image, then publishes it to `ghcr.io/<owner>/kepler-formal-action` on pushes to `main`, on semantic version tags, or by manual dispatch.
 
 Published images always receive these tags:
@@ -180,9 +180,9 @@ See `testdata/` for the fixture netlists and configs.
 
 ## Updating the embedded kepler-formal version
 
-1. Change `KEPLER_FORMAL_REF` in the Dockerfile to the upstream git ref you want to build.
+1. Change `KEPLER_FORMAL_COMMIT` in the Dockerfile to the upstream git ref or commit hash you want to build.
 2. Re-run `.github/workflows/smoke-test.yml` to confirm the action still behaves correctly through `uses: ./`.
-3. Optionally run `.github/workflows/candidate-image.yml` with a `kepler-formal-ref` override if you want to validate a candidate upstream ref before changing the Dockerfile.
+3. Optionally run `.github/workflows/candidate-image.yml` with a `kepler-formal-commit` override if you want to validate a candidate upstream ref before changing the Dockerfile.
 4. After the change is merged, publish the release image through a semantic version tag or `.github/workflows/publish-image.yml` manual dispatch.
 5. For reproducible releases, replace branch names with a commit SHA before publishing.
 6. Update this README if runtime assumptions or supported formats changed.

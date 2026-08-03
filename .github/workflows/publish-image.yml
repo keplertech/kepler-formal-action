@@ -27,7 +27,7 @@ jobs:
     timeout-minutes: 60
     outputs:
       image-version: ${{ steps.version.outputs.value }}
-      upstream-ref: ${{ steps.upstream-ref.outputs.value }}
+      upstream-commit: ${{ steps.upstream-commit.outputs.value }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -52,12 +52,12 @@ jobs:
 
           echo "value=$version" >> "$GITHUB_OUTPUT"
 
-      - name: Resolve upstream kepler-formal ref
-        id: upstream-ref
+      - name: Resolve upstream kepler-formal commit
+        id: upstream-commit
         run: |
           set -euo pipefail
-          upstream_ref="$(grep '^ARG KEPLER_FORMAL_REF=' Dockerfile | cut -d= -f2-)"
-          echo "value=$upstream_ref" >> "$GITHUB_OUTPUT"
+          upstream_commit="$(grep '^ARG KEPLER_FORMAL_COMMIT=' Dockerfile | cut -d= -f2-)"
+          echo "value=$upstream_commit" >> "$GITHUB_OUTPUT"
 
       - name: Build release candidate image
         env:
@@ -80,7 +80,7 @@ jobs:
           cat > .artifacts/publish/build-metadata.txt <<EOF
           image_tag=$IMAGE_TAG
           image_version=${{ steps.version.outputs.value }}
-          kepler_formal_ref=${{ steps.upstream-ref.outputs.value }}
+          kepler_formal_commit=${{ steps.upstream-commit.outputs.value }}
           git_sha=${GITHUB_SHA}
           EOF
 
@@ -207,6 +207,6 @@ jobs:
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
             org.opencontainers.image.version=${{ needs.smoke-image.outputs.image-version }}
-            io.keplertech.kepler-formal.ref=${{ needs.smoke-image.outputs.upstream-ref }}
+            io.keplertech.kepler-formal.ref=${{ needs.smoke-image.outputs.upstream-commit }}
           cache-from: type=gha
           cache-to: type=gha,mode=max

@@ -1,7 +1,7 @@
 FROM ubuntu:22.04 AS builder
 
 ARG DEBIAN_FRONTEND=noninteractive
-ARG KEPLER_FORMAL_REF=origin/fix4
+ARG KEPLER_FORMAL_COMMIT=main
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
@@ -30,7 +30,7 @@ WORKDIR /src
 RUN git clone --recurse-submodules \
     https://github.com/keplertech/kepler-formal.git kepler-formal \
     && cd kepler-formal \
-    && git checkout --detach "${KEPLER_FORMAL_REF}" \
+    && git checkout --detach "${KEPLER_FORMAL_COMMIT}" \
     && git submodule update --init --recursive
 
 WORKDIR /src/kepler-formal
@@ -50,7 +50,7 @@ RUN mkdir -p /opt/kepler-dist/bin /opt/kepler-dist/lib /opt/kepler-dist/meta \
             mkdir -p /opt/kepler-dist/lib/python; \
             find build -type f -name 'naja.so' -exec cp -P {} /opt/kepler-dist/lib/python/ \; ; \
        fi \
-    && printf '%s\n' "${KEPLER_FORMAL_REF}" > /opt/kepler-dist/meta/upstream-ref \
+    && printf '%s\n' "${KEPLER_FORMAL_COMMIT}" > /opt/kepler-dist/meta/upstream-ref \
     && if ! find /opt/kepler-dist/lib -maxdepth 1 -type f -name 'libnaja_*.so*' | grep -q .; then \
          echo 'Expected Naja shared libraries were not found in the CMake build output.' >&2; \
          exit 1; \
