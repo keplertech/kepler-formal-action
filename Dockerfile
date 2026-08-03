@@ -6,13 +6,13 @@ ARG KEPLER_FORMAL_COMMIT=main
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     git \
-    cmake \
     ninja-build \
     build-essential \
     pkg-config \
     libboost-dev \
     libboost-iostreams-dev \
     python3-dev \
+    python3-pip \
     capnproto \
     libcapnp-dev \
     libtbb-dev \
@@ -24,6 +24,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libfmt-dev \
     zlib1g-dev \
     && rm -rf /var/lib/apt/lists/*
+
+# Ubuntu 22.04's apt-get cmake package (3.22.1) is too old for kepler-formal's
+# thirdparty/naja/thirdparty/slang submodule, which requires CMake >= 3.28.
+RUN pip3 install --no-cache-dir "cmake>=3.28"
 
 WORKDIR /src
 
