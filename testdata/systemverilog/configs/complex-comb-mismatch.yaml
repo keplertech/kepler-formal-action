@@ -1,4 +1,5 @@
 format: systemverilog
+verification: sec
 input_paths:
   - testdata/systemverilog/cases/complex-comb-mismatch/latest/top.sv
   - testdata/systemverilog/cases/complex-comb-mismatch/reference/top.sv

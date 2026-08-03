@@ -1,4 +1,5 @@
 format: systemverilog
+verification: sec
 input_paths:
   - testdata/systemverilog/cases/dff-sync/latest/top.sv
   - testdata/systemverilog/cases/dff-sync/reference/top.sv

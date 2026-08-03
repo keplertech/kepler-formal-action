@@ -2,3 +2,4 @@
 .kepler-formal-action/
 .tmp/
 miter_log_*.txt
+naja_sv_diagnostics.log
