@@ -1,7 +1,0 @@
-.git
-.github/workflows
-.artifacts
-.kepler-formal-action
-.tmp
-miter_log_*.txt
-untitled:*.prompt.md

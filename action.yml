@@ -1,5 +1,5 @@
 name: Kepler Formal Compare
-description: Run kepler-formal through a published or locally built container against a caller-provided config file.
+description: Run kepler-formal through a published or locally Nix-built container against a caller-provided config file.
 inputs:
   config-path:
     description: Path to a kepler-formal YAML config file inside the checked-out workspace.

@@ -16,21 +16,31 @@ on:
 permissions:
   contents: read
   packages: write
+  attestations: write
+  artifact-metadata: write
+  id-token: write
+
+concurrency:
+  group: publish-image
+  cancel-in-progress: false
 
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository_owner }}/kepler-formal-action
+  LOCAL_IMAGE: kepler-formal-action-release:${{ github.sha }}
 
 jobs:
-  smoke-image:
+  publish:
     runs-on: ubuntu-latest
     timeout-minutes: 60
-    outputs:
-      image-version: ${{ steps.version.outputs.value }}
-      upstream-commit: ${{ steps.upstream-commit.outputs.value }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@8aa03977d8d733052d78f4e008a241fd1dbf36b3 # v31.10.6
+        with:
+          install_url: https://releases.nixos.org/nix/nix-2.35.1/install
 
       - name: Resolve image version
         id: version
@@ -39,114 +49,47 @@ jobs:
         run: |
           set -euo pipefail
 
-          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
-            version="$GITHUB_REF_NAME"
-          elif [ "${GITHUB_REF_NAME}" = "main" ]; then
-            version="main"
-          elif [ -n "$MANUAL_TAG" ]; then
+          if [[ -n "$MANUAL_TAG" ]]; then
             version="$MANUAL_TAG"
+          elif [[ "$GITHUB_REF_TYPE" = "tag" ]]; then
+            version="$GITHUB_REF_NAME"
+          elif [[ "$GITHUB_REF_NAME" = "main" ]]; then
+            version="main"
           else
             echo "Unsupported publish trigger. Use main, a semantic version tag, or workflow_dispatch with image-tag." >&2
             exit 1
           fi
 
+          if [[ ! "$version" =~ ^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$ ]]; then
+            echo "Invalid OCI image tag: $version" >&2
+            exit 1
+          fi
+
           echo "value=$version" >> "$GITHUB_OUTPUT"
 
-      - name: Resolve upstream kepler-formal commit
-        id: upstream-commit
-        run: |
-          set -euo pipefail
-          upstream_commit="$(grep '^ARG KEPLER_FORMAL_COMMIT=' Dockerfile | cut -d= -f2-)"
-          echo "value=$upstream_commit" >> "$GITHUB_OUTPUT"
+      - name: Build the locked Nix image
+        run: ./build-image.sh "$LOCAL_IMAGE"
 
-      - name: Build release candidate image
+      - name: Record release metadata
+        id: metadata
         env:
-          IMAGE_TAG: kepler-formal-action-release:${{ github.sha }}
+          IMAGE_VERSION: ${{ steps.version.outputs.value }}
         run: |
           set -euo pipefail
-
-          docker build -t "$IMAGE_TAG" .
-
-      - name: Smoke test release candidate image
-        env:
-          IMAGE_TAG: kepler-formal-action-release:${{ github.sha }}
-        run: |
-          set -euo pipefail
-
-          mkdir -p .tmp/publish .artifacts/publish
-          : > .tmp/publish/github_output
-          : > .tmp/publish/github_summary
-
+          mkdir -p .artifacts/publish
+          upstream_revision=$(docker inspect \
+            --format '{{ index .Config.Labels "io.keplertech.kepler-formal.revision" }}' \
+            "$LOCAL_IMAGE")
+          echo "upstream-revision=$upstream_revision" >> "$GITHUB_OUTPUT"
           cat > .artifacts/publish/build-metadata.txt <<EOF
-          image_tag=$IMAGE_TAG
-          image_version=${{ steps.version.outputs.value }}
-          kepler_formal_commit=${{ steps.upstream-commit.outputs.value }}
-          git_sha=${GITHUB_SHA}
+          image_tag=$LOCAL_IMAGE
+          image_version=$IMAGE_VERSION
+          kepler_formal_revision=$upstream_revision
+          git_sha=$GITHUB_SHA
           EOF
 
-          run_case() {
-            local case_name="$1"
-            local expected="$2"
-            local config_path="$3"
-            local artifact_dir="$4"
-            local exit_code
-
-            set +e
-            docker run --rm \
-              -v "$PWD":/github/workspace \
-              -e GITHUB_WORKSPACE=/github/workspace \
-              -e GITHUB_OUTPUT=/github/workspace/.tmp/publish/github_output \
-              -e GITHUB_STEP_SUMMARY=/github/workspace/.tmp/publish/github_summary \
-              "$IMAGE_TAG" \
-              "$config_path" \
-              "$artifact_dir" \
-              true
-            exit_code=$?
-            set -e
-
-            case "$expected" in
-              success)
-                if [ "$exit_code" -ne 0 ]; then
-                  echo "Case $case_name was expected to succeed but exited with $exit_code." >&2
-                  return 1
-                fi
-                ;;
-              failure)
-                if [ "$exit_code" -eq 0 ]; then
-                  echo "Case $case_name was expected to fail but exited with 0." >&2
-                  return 1
-                fi
-                ;;
-              *)
-                echo "Unsupported expectation: $expected" >&2
-                return 1
-                ;;
-            esac
-          }
-
-          run_case \
-            verilog-equivalent \
-            success \
-            testdata/verilog/configs/equivalent.yaml \
-            .artifacts/publish/verilog-equivalent
-
-          run_case \
-            verilog-mismatch \
-            failure \
-            testdata/verilog/configs/mismatch.yaml \
-            .artifacts/publish/verilog-mismatch
-
-          run_case \
-            systemverilog-operator-mismatch \
-            failure \
-            testdata/systemverilog/configs/operator-mismatch.yaml \
-            .artifacts/publish/systemverilog-operator-mismatch
-
-          run_case \
-            systemverilog-complex-comb-mismatch \
-            failure \
-            testdata/systemverilog/configs/complex-comb-mismatch.yaml \
-            .artifacts/publish/systemverilog-complex-comb-mismatch
+      - name: Smoke test the exact image to publish
+        run: ./ci/smoke-image.sh "$LOCAL_IMAGE" .artifacts/publish .tmp/publish
 
       - name: Upload release candidate artifacts
         if: always()
@@ -158,14 +101,6 @@ jobs:
             .tmp/publish
           if-no-files-found: warn
 
-  publish:
-    needs: smoke-image
-    runs-on: ubuntu-latest
-    timeout-minutes: 60
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-
       - name: Log in to GHCR
         uses: docker/login-action@v3
         with:
@@ -173,40 +108,57 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
       - name: Compute image tags
         id: tags
         env:
-          IMAGE_VERSION: ${{ needs.smoke-image.outputs.image-version }}
+          IMAGE_VERSION: ${{ steps.version.outputs.value }}
         run: |
           set -euo pipefail
 
           short_sha="${GITHUB_SHA::12}"
-          version="$IMAGE_VERSION"
           tags=(
-            "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${version}"
-            "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:sha-${short_sha}"
+            "$REGISTRY/$IMAGE_NAME:$IMAGE_VERSION"
+            "$REGISTRY/$IMAGE_NAME:sha-$short_sha"
           )
 
-          if [[ "$version" =~ ^v([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
-            tags+=("${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:v${BASH_REMATCH[1]}")
-            tags+=("${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:v${BASH_REMATCH[1]}.${BASH_REMATCH[2]}")
+          if [[ "$IMAGE_VERSION" =~ ^v([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
+            tags+=("$REGISTRY/$IMAGE_NAME:v${BASH_REMATCH[1]}")
+            tags+=("$REGISTRY/$IMAGE_NAME:v${BASH_REMATCH[1]}.${BASH_REMATCH[2]}")
           fi
 
-          echo "value=$(IFS=,; echo "${tags[*]}")" >> "$GITHUB_OUTPUT"
+          {
+            echo 'value<<EOF'
+            printf '%s\n' "${tags[@]}"
+            echo EOF
+          } >> "$GITHUB_OUTPUT"
 
-      - name: Build and publish image
-        uses: docker/build-push-action@v6
+      - name: Publish the smoke-tested image
+        id: push
+        env:
+          IMAGE_TAGS: ${{ steps.tags.outputs.value }}
+        run: |
+          set -euo pipefail
+          digest=""
+
+          while IFS= read -r tag; do
+            [[ -n "$tag" ]] || continue
+            docker tag "$LOCAL_IMAGE" "$tag"
+            push_output=$(docker push "$tag")
+            printf '%s\n' "$push_output"
+            if [[ -z "$digest" ]]; then
+              digest=$(sed -n 's/^.*digest: \(sha256:[0-9a-f]*\).*$/\1/p' <<< "$push_output" | tail -1)
+            fi
+          done <<< "$IMAGE_TAGS"
+
+          if [[ -z "$digest" ]]; then
+            echo "Could not determine the published image digest." >&2
+            exit 1
+          fi
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+
+      - name: Attest the published image
+        uses: actions/attest@v4
         with:
-          context: .
-          push: true
-          tags: ${{ steps.tags.outputs.value }}
-          labels: |
-            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
-            org.opencontainers.image.revision=${{ github.sha }}
-            org.opencontainers.image.version=${{ needs.smoke-image.outputs.image-version }}
-            io.keplertech.kepler-formal.ref=${{ needs.smoke-image.outputs.upstream-commit }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          subject-digest: ${{ steps.push.outputs.digest }}
+          push-to-registry: true

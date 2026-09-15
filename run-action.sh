@@ -41,8 +41,14 @@ build_local_image() {
   local action_path="$1"
   local image_ref="kepler-formal-action-local:${GITHUB_SHA:-local}"
 
-  echo "Building local action image from $action_path" >&2
-  docker build -t "$image_ref" "$action_path" >&2
+  if docker image inspect "$image_ref" >/dev/null 2>&1; then
+    echo "Reusing local action image $image_ref" >&2
+    printf '%s\n' "$image_ref"
+    return 0
+  fi
+
+  echo "Building local action image from the Nix flake in $action_path" >&2
+  "$action_path/build-image.sh" "$image_ref" >&2
   printf '%s\n' "$image_ref"
 }
 

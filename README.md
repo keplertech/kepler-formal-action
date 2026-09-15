@@ -6,7 +6,7 @@ The action does not decide what latest and reference mean. The calling workflow 
 
 ## What it does
 
-- Builds a pinned kepler-formal release inside the action image with the upstream CMake flow.
+- Builds the action image from the kepler-formal package pinned by `flake.lock`.
 - Runs kepler-formal in `--config` mode.
 - Captures the tool log, copies the config file into an artifact directory, and exposes that directory as an action output.
 - Fails the step when kepler-formal reports a mismatch or another execution error.
@@ -130,7 +130,9 @@ For multi-file designs, use nested `input_paths` lists exactly as kepler-formal 
 
 ## Runtime strategy
 
-The action image builds kepler-formal from the upstream git ref configured in the Dockerfile. The runtime image bundles the installed binary and required Naja shared libraries, and keeps the remaining runtime dependencies explicit in the image.
+Nix is the canonical build definition for the action image. `flake.lock` pins an exact kepler-formal revision and the matching nixpkgs revision, and `flake.nix` turns that package closure into a reproducible `x86_64-linux` OCI image. This avoids maintaining a second dependency and installation recipe in a Dockerfile.
+
+Callers of a published action do not need Nix. The composite wrapper pulls the already-built image from GHCR and runs it with Docker. Building the image requires Docker plus Nix on `x86_64-linux` (or a configured Linux remote builder); macOS can still consume and smoke-test an already-built image through Docker Desktop.
 
 When the action is consumed from another repository, the wrapper pulls the published GHCR image that matches the action ref:
 
@@ -143,15 +145,23 @@ Remote consumption should use `main`, a published release tag, or a published co
 
 If you want other repositories to pull the GHCR image anonymously, set the package visibility to `Public` in GitHub Packages. GHCR packages are private on first publish by default. If you keep the package private, grant the caller repository read access to the package and ensure its workflow token has `packages: read`.
 
-When the action is used locally through `uses: ./`, it builds the repository Dockerfile on the runner and executes that local image. That keeps pull-request smoke tests validating the current Dockerfile instead of the last published release image.
+When the action is used locally through `uses: ./`, it runs `build-image.sh`, which builds and loads the image from the locked flake. The script reuses an image already loaded for the current commit, so a workflow with several local action invocations builds it only once.
+
+To build the image directly:
+
+```bash
+./build-image.sh kepler-formal-action:local
+```
 
 ## Candidate validation and GHCR release
 
-This repository now uses two container validation lanes in addition to the normal action smoke test:
+This repository uses two image validation lanes in addition to the normal action smoke test:
 
-- `.github/workflows/smoke-test.yml` validates the action contract through `uses: ./`, which makes the composite wrapper build and run the repository Dockerfile locally on the runner.
-- `.github/workflows/candidate-image.yml` builds a temporary image directly from the repository Dockerfile for pull requests and manual dispatch. Manual runs can override `KEPLER_FORMAL_COMMIT` with a specific upstream git ref or commit hash without editing the Dockerfile.
-- `.github/workflows/publish-image.yml` rebuilds and smoke-tests the committed image, then publishes it to `ghcr.io/<owner>/kepler-formal-action` on pushes to `main`, on semantic version tags, or by manual dispatch.
+- `.github/workflows/smoke-test.yml` installs Nix, validates the action contract through `uses: ./`, and therefore exercises the locally Nix-built image rather than the last published release.
+- `.github/workflows/candidate-image.yml` builds a temporary image from the locked flake for pull requests and manual dispatch. Manual runs can override the kepler-formal input with a git ref or commit without modifying `flake.lock`.
+- `.github/workflows/publish-image.yml` builds the locked image once, smoke-tests that exact local image, tags it, publishes it to `ghcr.io/<owner>/kepler-formal-action`, and emits a registry attestation. It never rebuilds between testing and publication.
+
+The candidate and publish image lanes call `ci/smoke-image.sh`, so their validation uses the same six Verilog and SystemVerilog cases.
 
 Published images always receive these tags:
 
@@ -180,9 +190,9 @@ See `testdata/` for the fixture netlists and configs.
 
 ## Updating the embedded kepler-formal version
 
-1. Change `KEPLER_FORMAL_COMMIT` in the Dockerfile to the upstream git ref or commit hash you want to build.
-2. Re-run `.github/workflows/smoke-test.yml` to confirm the action still behaves correctly through `uses: ./`.
-3. Optionally run `.github/workflows/candidate-image.yml` with a `kepler-formal-commit` override if you want to validate a candidate upstream ref before changing the Dockerfile.
-4. After the change is merged, publish the release image through a semantic version tag or `.github/workflows/publish-image.yml` manual dispatch.
-5. For reproducible releases, replace branch names with a commit SHA before publishing.
-6. Update this README if runtime assumptions or supported formats changed.
+1. Optionally run `.github/workflows/candidate-image.yml` with a `kepler-formal-commit` override to validate a branch, tag, or full commit before changing the lock.
+2. Update the pinned input with `nix flake update kepler-formal` and commit the resulting `flake.lock` change.
+3. Run `./build-image.sh kepler-formal-action:local` and `./ci/smoke-image.sh kepler-formal-action:local .artifacts/local .tmp/local`, or let the pull-request workflows run the same checks.
+4. Confirm the resolved revision with `nix flake metadata --json | jq -r '.locks.nodes."kepler-formal".locked.rev'`.
+5. Merge the lock update, then publish through a semantic version tag or the manual `publish-image` workflow.
+6. Keep the GHCR package public for anonymous pulls and update this README if runtime assumptions or supported formats change.

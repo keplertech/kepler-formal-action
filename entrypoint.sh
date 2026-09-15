@@ -6,7 +6,7 @@ workspace="${GITHUB_WORKSPACE:-/github/workspace}"
 config_input="${1:-}"
 artifact_input="${2:-.kepler-formal-action}"
 write_step_summary="${3:-true}"
-tool_bin="/opt/kepler-formal/kepler-formal"
+tool_bin="${KEPLER_FORMAL_BIN:-kepler-formal}"
 
 artifact_dir=""
 resolved_config=""
@@ -63,7 +63,7 @@ write_output() {
 finalize() {
   local artifact_relative=""
   local config_relative=""
-  local upstream_ref="unknown"
+  local upstream_ref="${KEPLER_FORMAL_REF:-unknown}"
 
   if [[ -n "$artifact_dir" ]]; then
     artifact_relative="$(to_workspace_relative "$artifact_dir")"
@@ -71,10 +71,6 @@ finalize() {
 
   if [[ -n "$resolved_config" ]]; then
     config_relative="$(to_workspace_relative "$resolved_config")"
-  fi
-
-  if [[ -f /opt/kepler-formal/meta/upstream-ref ]]; then
-    upstream_ref="$(cat /opt/kepler-formal/meta/upstream-ref)"
   fi
 
   if [[ -n "$artifact_dir" ]]; then
@@ -135,6 +131,12 @@ echo "Config file: $resolved_config"
 cd "$workspace"
 echo "Execution directory: $(pwd)"
 echo "Running kepler-formal..."
+
+if ! command -v "$tool_bin" >/dev/null 2>&1 && [[ ! -x "$tool_bin" ]]; then
+  echo "kepler-formal executable not found: $tool_bin" >&2
+  exit_code=127
+  exit "$exit_code"
+fi
 
 set +e
 "$tool_bin" --config "$resolved_config"
