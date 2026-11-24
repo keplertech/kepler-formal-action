@@ -9,131 +9,98 @@ permissions:
   contents: read
 
 jobs:
-  smoke-test:
-    runs-on: ubuntu-latest
-    timeout-minutes: 60
+  smoke-matrix:
+    name: smoke matrix (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, ubuntu-24.04-arm, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
     steps:
-      - name: Checkout
-        uses: actions/checkout@v6
+      - uses: actions/checkout@v6
 
-      - name: Install Nix for the local action image
-        uses: cachix/install-nix-action@8aa03977d8d733052d78f4e008a241fd1dbf36b3 # v31.10.6
+      - uses: actions/setup-python@v6
         with:
-          install_url: https://releases.nixos.org/nix/nix-2.35.1/install
+          python-version: '3.12'
 
-      - name: Verilog equivalent netlists should pass
-        id: verilog-equivalent
+      - name: Install the pinned kepler-formal release
+        run: |
+          version=$(sed -n '/^  kepler-formal-version:/,/default:/s/^ *default: *//p' action.yml)
+          python -m pip install --quiet "kepler-formal==$version" "PyYAML>=6"
+
+      - name: Run the smoke matrix
+        run: ci/smoke.sh .artifacts/smoke
+
+      - if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: smoke-artifacts-${{ matrix.os }}
+          path: .artifacts/smoke
+          if-no-files-found: warn
+
+  action-contract:
+    name: action contract (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Equivalent Verilog netlists from a config pass
+        id: config-equivalent
         uses: ./
         with:
           config-path: testdata/verilog/configs/equivalent.yaml
-          artifact-dir: .artifacts/verilog-equivalent
+          artifact-dir: .artifacts/config-equivalent
 
-      - name: Upload verilog equivalent artifacts
-        if: always()
-        uses: actions/upload-artifact@v7
+      - name: SEC with a reset bootstrap from direct inputs passes
+        id: inputs-sec
+        uses: ./
         with:
-          name: verilog-equivalent-artifacts
-          path: .artifacts/verilog-equivalent
-          if-no-files-found: warn
+          design1: testdata/systemverilog/cases/dff-async-reset/reference/*.sv
+          design2: testdata/systemverilog/cases/dff-async-reset/latest/*.sv
+          top: top
+          mode: sec
+          sec-engine: pdr
+          reset-ports: rst_n=0
+          reset-cycles: '2'
+          artifact-dir: .artifacts/inputs-sec
 
-      - name: Verilog mismatching netlists should fail
-        id: verilog-mismatch
+      - name: A SEC counterexample fails the step
+        id: inputs-mismatch
         continue-on-error: true
         uses: ./
         with:
-          config-path: testdata/verilog/configs/mismatch.yaml
-          artifact-dir: .artifacts/verilog-mismatch
+          design1: testdata/systemverilog/cases/operator-mismatch-basic/reference/top.sv
+          design2: testdata/systemverilog/cases/operator-mismatch-basic/latest/top.sv
+          mode: sec
+          artifact-dir: .artifacts/inputs-mismatch
 
-      - name: Assert verilog mismatch failure
-        if: always()
+      - name: Check outputs
+        env:
+          EQ_VERDICT: ${{ steps.config-equivalent.outputs.verdict }}
+          SEC_VERDICT: ${{ steps.inputs-sec.outputs.verdict }}
+          MISMATCH_OUTCOME: ${{ steps.inputs-mismatch.outcome }}
+          MISMATCH_VERDICT: ${{ steps.inputs-mismatch.outputs.verdict }}
+          MISMATCH_EXIT: ${{ steps.inputs-mismatch.outputs.exit-code }}
+          ARTIFACT_DIR: ${{ steps.inputs-mismatch.outputs.artifact-dir }}
         run: |
-          if [ "${{ steps.verilog-mismatch.outcome }}" != "failure" ]; then
-            echo "Expected the mismatching fixture to fail." >&2
-            exit 1
-          fi
+          set -x
+          test "$EQ_VERDICT" = equivalent
+          test "$SEC_VERDICT" = equivalent
+          test "$MISMATCH_OUTCOME" = failure
+          test "$MISMATCH_VERDICT" = different
+          test "$MISMATCH_EXIT" = 3
+          test -s "$ARTIFACT_DIR/kepler-formal.log"
+          grep -q 'Input trace' "$ARTIFACT_DIR/summary.md"
 
-      - name: Upload verilog mismatch artifacts
-        if: always()
+      - if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: verilog-mismatch-artifacts
-          path: .artifacts/verilog-mismatch
-          if-no-files-found: warn
-
-      - name: SystemVerilog operator-style netlists should fail on mismatch
-        id: systemverilog-operator-mismatch
-        continue-on-error: true
-        uses: ./
-        with:
-          config-path: testdata/systemverilog/configs/operator-mismatch.yaml
-          artifact-dir: .artifacts/systemverilog-operator-mismatch
-
-      - name: Assert systemverilog operator mismatch failure
-        if: always()
-        run: |
-          if [ "${{ steps.systemverilog-operator-mismatch.outcome }}" != "failure" ]; then
-            echo "Expected the SystemVerilog operator-style fixture to fail on mismatch." >&2
-            exit 1
-          fi
-
-      - name: Upload systemverilog operator mismatch artifacts
-        if: always()
-        uses: actions/upload-artifact@v7
-        with:
-          name: systemverilog-operator-mismatch-artifacts
-          path: .artifacts/systemverilog-operator-mismatch
-          if-no-files-found: warn
-
-      - name: SystemVerilog synchronous DFF netlists should pass
-        id: systemverilog-dff-sync
-        uses: ./
-        with:
-          config-path: testdata/systemverilog/configs/dff-sync.yaml
-          artifact-dir: .artifacts/systemverilog-dff-sync
-
-      - name: Upload systemverilog synchronous DFF artifacts
-        if: always()
-        uses: actions/upload-artifact@v7
-        with:
-          name: systemverilog-dff-sync-artifacts
-          path: .artifacts/systemverilog-dff-sync
-          if-no-files-found: warn
-
-      - name: SystemVerilog async-reset DFF netlists should pass
-        id: systemverilog-dff-async-reset
-        uses: ./
-        with:
-          config-path: testdata/systemverilog/configs/dff-async-reset.yaml
-          artifact-dir: .artifacts/systemverilog-dff-async-reset
-
-      - name: Upload systemverilog async-reset DFF artifacts
-        if: always()
-        uses: actions/upload-artifact@v7
-        with:
-          name: systemverilog-dff-async-reset-artifacts
-          path: .artifacts/systemverilog-dff-async-reset
-          if-no-files-found: warn
-
-      - name: Complex SystemVerilog netlists should fail on combinational mismatch
-        id: systemverilog-complex-comb-mismatch
-        continue-on-error: true
-        uses: ./
-        with:
-          config-path: testdata/systemverilog/configs/complex-comb-mismatch.yaml
-          artifact-dir: .artifacts/systemverilog-complex-comb-mismatch
-
-      - name: Assert complex systemverilog combinational mismatch failure
-        if: always()
-        run: |
-          if [ "${{ steps.systemverilog-complex-comb-mismatch.outcome }}" != "failure" ]; then
-            echo "Expected the complex SystemVerilog fixture to fail on combinational mismatch." >&2
-            exit 1
-          fi
-
-      - name: Upload complex systemverilog mismatch artifacts
-        if: always()
-        uses: actions/upload-artifact@v7
-        with:
-          name: systemverilog-complex-comb-mismatch-artifacts
-          path: .artifacts/systemverilog-complex-comb-mismatch
+          name: action-artifacts-${{ matrix.os }}
+          path: .artifacts
           if-no-files-found: warn

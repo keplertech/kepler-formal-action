@@ -1,42 +1,165 @@
 name: Kepler Formal Compare
-description: Run kepler-formal through a published or locally Nix-built container against a caller-provided config file.
+description: Prove two versions of a hardware design equivalent (LEC or SEC) with Kepler Formal, installed from PyPI.
 inputs:
   config-path:
-    description: Path to a kepler-formal YAML config file inside the checked-out workspace.
-    required: true
+    description: >-
+      Path to a kepler-formal YAML config file inside the workspace. Use either
+      this or design1/design2.
+    required: false
+    default: ''
+  design1:
+    description: >-
+      Reference design: workspace-relative files or glob patterns, separated by
+      spaces or newlines.
+    required: false
+    default: ''
+  design2:
+    description: Implementation design, in the same form as design1.
+    required: false
+    default: ''
+  format:
+    description: 'Input format of both designs: systemverilog, verilog (gate-level), vhdl or naja_if.'
+    required: false
+    default: systemverilog
+  top:
+    description: Top module of both designs. Inferred when empty.
+    required: false
+    default: ''
+  design1-top:
+    description: Top module of design1, when it differs from top.
+    required: false
+    default: ''
+  design2-top:
+    description: Top module of design2, when it differs from top.
+    required: false
+    default: ''
+  mode:
+    description: lec (combinational) or sec (sequential).
+    required: false
+    default: lec
+  sec-engine:
+    description: SEC engine (pdr, k_induction or imc). Engine default when empty.
+    required: false
+    default: ''
+  sec-encoding:
+    description: SEC encoding (binary or dual_rail_steady). Engine default when empty.
+    required: false
+    default: ''
+  max-k:
+    description: SEC bound. Engine default when empty.
+    required: false
+    default: ''
+  reset-ports:
+    description: >-
+      SEC reset bootstrap: space-separated <port>=<active value> pairs, for
+      example "arst_i=1 cke_i=0". Each port is held at its active value for
+      reset-cycles cycles, then at the opposite value.
+    required: false
+    default: ''
+  reset-cycles:
+    description: Number of reset bootstrap cycles when reset-ports is set.
+    required: false
+    default: '4'
+  liberty-files:
+    description: Liberty files for gate-level Verilog netlists (files or globs).
+    required: false
+    default: ''
   artifact-dir:
-    description: Workspace-relative directory where the action writes logs and copied inputs.
+    description: Workspace-relative directory where the action writes logs and results.
     required: false
     default: .kepler-formal-action
   write-step-summary:
-    description: Whether to append a short execution summary to the GitHub step summary.
+    description: Whether to append the verdict to the GitHub step summary.
     required: false
     default: 'true'
+  kepler-formal-version:
+    description: >-
+      kepler-formal release to install from PyPI, or any pip requirement
+      (a wheel path or a git URL) to test an unreleased build.
+    required: false
+    default: 1.0.0
+  python-version:
+    description: >-
+      Python version set up with actions/setup-python. Set it to an empty
+      string to use the python3 already on PATH (for example on a self-hosted
+      runner).
+    required: false
+    default: '3.12'
 outputs:
   artifact-dir:
-    description: Workspace-relative directory containing the generated action artifacts.
+    description: Workspace-relative directory containing the generated artifacts.
     value: ${{ steps.run.outputs.artifact-dir }}
   exit-code:
-    description: Exit code returned by kepler-formal.
+    description: >-
+      0 equivalent, 1 different (LEC) or partially proved, 2 inconclusive,
+      3 counterexample (SEC), 64 invalid input, 70 error.
     value: ${{ steps.run.outputs.exit-code }}
   status:
-    description: Final action status, success or failure.
+    description: success when the designs were proved equivalent, failure otherwise.
     value: ${{ steps.run.outputs.status }}
+  verdict:
+    description: equivalent, different, partially_proved, inconclusive, unsupported, invalid_input or error.
+    value: ${{ steps.run.outputs.verdict }}
+  kepler-formal-version:
+    description: Installed kepler-formal version.
+    value: ${{ steps.run.outputs.kepler-formal-version }}
 runs:
   using: composite
   steps:
+    - if: inputs.python-version != ''
+      id: python
+      uses: actions/setup-python@v6
+      with:
+        python-version: ${{ inputs.python-version }}
+        update-environment: false
+
+    - id: install
+      shell: bash
+      env:
+        BASE_PYTHON: ${{ steps.python.outputs.python-path }}
+        KF_VERSION: ${{ inputs.kepler-formal-version }}
+      run: |
+        set -euo pipefail
+        base_python="${BASE_PYTHON:-python3}"
+        if [[ "$KF_VERSION" =~ ^[0-9][0-9A-Za-z.!+-]*$ ]]; then
+          requirement="kepler-formal==$KF_VERSION"
+        else
+          requirement="$KF_VERSION"
+        fi
+        venv="${RUNNER_TEMP:-${TMPDIR:-/tmp}}/kepler-formal-action/venv"
+        rm -rf "$venv"
+        "$base_python" -m venv "$venv"
+        if [[ -x "$venv/bin/python" ]]; then
+          python="$venv/bin/python"
+        else
+          python="$venv/Scripts/python.exe"
+        fi
+        echo "Installing $requirement"
+        "$python" -m pip install --disable-pip-version-check --quiet "$requirement" "PyYAML>=6"
+        echo "python=$python" >> "$GITHUB_OUTPUT"
+
     - id: run
       shell: bash
       env:
         ACTION_PATH: ${{ github.action_path }}
-        ACTION_REF: ${{ github.action_ref }}
-        ACTION_REPOSITORY: ${{ github.action_repository }}
-        GITHUB_ACTOR: ${{ github.actor }}
-        GITHUB_TOKEN: ${{ github.token }}
-        INPUT_ARTIFACT_DIR: ${{ inputs.artifact-dir }}
+        KF_PYTHON: ${{ steps.install.outputs.python }}
         INPUT_CONFIG_PATH: ${{ inputs.config-path }}
+        INPUT_DESIGN1: ${{ inputs.design1 }}
+        INPUT_DESIGN2: ${{ inputs.design2 }}
+        INPUT_FORMAT: ${{ inputs.format }}
+        INPUT_TOP: ${{ inputs.top }}
+        INPUT_DESIGN1_TOP: ${{ inputs.design1-top }}
+        INPUT_DESIGN2_TOP: ${{ inputs.design2-top }}
+        INPUT_MODE: ${{ inputs.mode }}
+        INPUT_SEC_ENGINE: ${{ inputs.sec-engine }}
+        INPUT_SEC_ENCODING: ${{ inputs.sec-encoding }}
+        INPUT_MAX_K: ${{ inputs.max-k }}
+        INPUT_RESET_PORTS: ${{ inputs.reset-ports }}
+        INPUT_RESET_CYCLES: ${{ inputs.reset-cycles }}
+        INPUT_LIBERTY_FILES: ${{ inputs.liberty-files }}
+        INPUT_ARTIFACT_DIR: ${{ inputs.artifact-dir }}
         INPUT_WRITE_STEP_SUMMARY: ${{ inputs.write-step-summary }}
-      run: bash "$ACTION_PATH/run-action.sh"
+      run: '"$KF_PYTHON" -I "$ACTION_PATH/kepler_formal_action.py"'
 branding:
   icon: activity
   color: blue

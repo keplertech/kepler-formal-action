@@ -5,3 +5,5 @@ graphify-out/
 result
 miter_log_*.txt
 naja_sv_diagnostics.log
+.venv/
+__pycache__/

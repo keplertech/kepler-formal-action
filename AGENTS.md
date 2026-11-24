@@ -1,60 +1,39 @@
 # Kepler Formal Action — Agent Guide
 
-This repository publishes the reusable GitHub Action that runs Kepler Formal against a caller-provided configuration. Preserve the public Action contract in `action.yml`: callers prepare their inputs, the action runs `kepler-formal --config`, artifacts are written inside the workspace, and mismatches fail the step.
+This repository publishes the reusable GitHub Action that proves two versions of a hardware design equivalent with Kepler Formal. Preserve the public contract in `action.yml`: callers prepare both designs in the workspace and pass either a kepler-formal YAML config (`config-path`) or direct inputs (`design1`, `design2`, ...); artifacts are written inside the workspace; the step fails unless the designs are proved equivalent.
 
-## Packaging architecture
+## Runtime architecture
 
-Nix is the single source of truth for the runtime contents; Docker/GHCR is the public GitHub Action delivery boundary.
+- The action is a composite action. It installs the `kepler-formal` package from PyPI (pinned by the `kepler-formal-version` input) into a virtual environment under `$RUNNER_TEMP`, then runs `kepler_formal_action.py`.
+- The PyPI package exposes the engine as a Python API (`kepler_formal.verify_designs`) and does not ship the `kepler-formal` executable. `kepler_formal_action.py` therefore owns the CLI-compatible behavior: config parsing, design loading through NajaEDA (`loadSystemVerilog`, `loadGateLevelVerilog`, `loadVHDL`, `loadNajaIF`, `loadLibertyPrimitives`), verdict-to-exit-code mapping, logs, outputs and step summary.
+- Design loading must follow the executable (`src/bin/KeplerFormal.cpp` upstream): one NLDB per design, Liberty primitives loaded into that DB first, SystemVerilog top selection through a slang command file (`--top`, `--single-unit`, `-f`).
+- Unsupported config keys must fail with a clear message (exit 64), never be silently ignored.
+- Verification runs in a child process so native crashes are reported; its working directory is `<artifact-dir>/work` so engine files never land in the caller's workspace root.
+- There is no Docker image, Nix flake or GHCR package any more. Do not reintroduce a second packaging path unless the PyPI package cannot serve a required feature.
 
-- `flake.nix` consumes the exact `kepler-formal` revision recorded in `flake.lock` and creates the `x86_64-linux` OCI image with `dockerTools.buildLayeredImage`.
-- Do not reintroduce a Dockerfile that independently installs apt packages or rebuilds Kepler Formal with CMake. That would create a second packaging definition that can drift from the upstream Nix package.
-- Published-action consumers need Docker but do not need Nix. Remote refs are mapped to prebuilt GHCR tags by `run-action.sh`.
-- Local `uses: ./` execution requires Docker and an `x86_64-linux` Nix builder. `build-image.sh` builds and loads the locked image, and `run-action.sh` reuses the image for repeated invocations at the same commit. A macOS host needs a configured Linux remote builder or must run the build in a Linux VM/container.
-- `entrypoint.sh` owns the stable runtime contract: workspace path validation, log capture, outputs, step summary, mismatch handling, and upstream revision reporting.
+## Exit codes
 
-## Reproducibility and release invariants
-
-- `flake.lock`, not a branch name in a Dockerfile, selects the released Kepler Formal revision.
-- The Kepler Formal flake's `nixpkgs` input is followed so the package and image use one dependency universe.
-- Keep the public `keplertech` Cachix substituter and signing key in `flake.nix`; CI should download the upstream package closure instead of rebuilding it when the locked revision is published.
-- A published GHCR image must be the exact local image that passed `ci/smoke-image.sh`. Never rebuild the image between smoke testing and `docker push`.
-- Preserve immutable `sha-<12>` tags and semantic-version tags. Do not add a mutable `latest` tag.
-- Keep publish runs globally serialized so concurrent releases cannot race while updating mutable `main`, major, or minor tags.
-- Keep the GHCR package public so callers can pull it anonymously. Private-package support in `run-action.sh` is a fallback, not the intended public experience.
-- Keep OCI source, action revision, upstream Kepler Formal revision, and release attestation metadata intact.
+`0` equivalent, `1` different (LEC) or partially proved, `2` inconclusive/unsupported/no result, `3` counterexample (SEC), `64` invalid input, `70` loading or internal error. Keep these stable; callers and `ci/smoke.sh` depend on them.
 
 ## Updating Kepler Formal
 
-Use a candidate workflow override to test a branch, tag, or full commit without changing the lock. Once accepted:
+1. Publish the kepler-formal release to PyPI (wheels for Linux x86_64/arm64, macOS arm64 and Windows).
+2. Change the `kepler-formal-version` default in `action.yml`; `.github/workflows/smoke-test.yml` reads it from there.
+3. Run `PYTHON=.venv/bin/python ci/smoke.sh` locally and let the workflow run on all runner types.
+4. Tag `v1.x.y` and move the `v1` tag.
 
-```bash
-nix flake update kepler-formal
-nix flake metadata --json | jq -r '.locks.nodes."kepler-formal".locked.rev'
-./build-image.sh kepler-formal-action:local
-./ci/smoke-image.sh kepler-formal-action:local .artifacts/local .tmp/local
-```
-
-Commit `flake.lock` with the update. A release is not ready until the pinned Kepler Formal closure is available from the public Cachix cache; otherwise CI may fall back to a long source build.
-
-## Workflow responsibilities
-
-- `.github/workflows/smoke-test.yml`: verifies the composite Action contract via local `uses: ./` calls.
-- `.github/workflows/candidate-image.yml`: builds a locked or temporarily overridden Nix image and runs the shared smoke suite.
-- `.github/workflows/publish-image.yml`: builds once, runs the shared smoke suite, pushes that same image under all required tags, and attests its digest.
-- `ci/smoke-image.sh`: canonical image-level smoke matrix. Add supported fixtures here so candidate and release coverage cannot diverge.
+To try an unreleased build, pass any pip requirement as `kepler-formal-version` (a wheel artifact path or a `git+https://...` URL; a git build compiles from source and is slow).
 
 ## Validation
 
-Run the cheapest relevant checks first:
-
 ```bash
-bash -n build-image.sh run-action.sh entrypoint.sh ci/smoke-image.sh
-nix flake check --accept-flake-config --no-update-lock-file
-./build-image.sh kepler-formal-action:local
-./ci/smoke-image.sh kepler-formal-action:local .artifacts/local .tmp/local
+bash -n ci/smoke.sh
+python3 -m py_compile kepler_formal_action.py
+python3 -m venv .venv && .venv/bin/pip install kepler-formal==1.0.0 PyYAML
+PYTHON=.venv/bin/python ci/smoke.sh
 ```
 
-The full image build currently targets `x86_64-linux`; the published Action remains Linux-only even though the upstream Kepler Formal flake also packages `aarch64-darwin`.
+`ci/smoke.sh` is the canonical fixture matrix: add supported fixtures there first, then to the `uses: ./` contract job if they exercise a new input.
 
 ## Knowledge graph
 

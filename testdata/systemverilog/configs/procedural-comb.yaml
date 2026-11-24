@@ -1,0 +1,4 @@
+format: systemverilog
+input_paths:
+  - testdata/systemverilog/cases/procedural-comb/latest/top.sv
+  - testdata/systemverilog/cases/procedural-comb/reference/top.sv
