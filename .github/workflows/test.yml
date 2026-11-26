@@ -1,0 +1,126 @@
+# SPDX-FileCopyrightText: 2026 keplertech.io
+#
+# SPDX-License-Identifier: Apache-2.0
+
+# Regression tests of the action: unit tests of kepler_formal_action.py, and
+# every case of tests/cases.json run through the action itself (uses: ./).
+# Each case step runs with continue-on-error so that the expected errors
+# (top_not_found, invalid_input, ...) can be checked; the next step fails the
+# job when an output, result.json or summary.md does not match.
+#
+# Branch protection: require the "Action self-test" check.
+
+name: test
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  unit:
+    name: unit tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Install the pinned kepler-formal release and pytest
+        run: |
+          version=$(sed -n '/^  kepler-formal-version:/,/default:/s/^ *default: *//p' action.yml)
+          python -m pip install --quiet "kepler-formal==$version" "PyYAML>=6" pytest
+
+      - name: Run the tests
+        run: python -m pytest tests -v
+
+  cases:
+    name: list self-test cases
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      cases: ${{ steps.list.outputs.cases }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - id: list
+        run: |
+          python3 -c "import json; print('cases=' + json.dumps(json.load(open('tests/cases.json'))['cases']))" >> "$GITHUB_OUTPUT"
+
+  self-test:
+    name: self-test (${{ matrix.case.name }})
+    needs: cases
+    strategy:
+      fail-fast: false
+      matrix:
+        case: ${{ fromJSON(needs.cases.outputs.cases) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Run the action (${{ matrix.case.description }})
+        id: action
+        continue-on-error: true
+        uses: ./
+        with:
+          config-path: ${{ matrix.case.inputs['config-path'] }}
+          design1: ${{ matrix.case.inputs.design1 }}
+          design2: ${{ matrix.case.inputs.design2 }}
+          format: ${{ matrix.case.inputs.format }}
+          top: ${{ matrix.case.inputs.top }}
+          design1-top: ${{ matrix.case.inputs['design1-top'] }}
+          design2-top: ${{ matrix.case.inputs['design2-top'] }}
+          mode: ${{ matrix.case.inputs.mode }}
+          sec-engine: ${{ matrix.case.inputs['sec-engine'] }}
+          sec-encoding: ${{ matrix.case.inputs['sec-encoding'] }}
+          max-k: ${{ matrix.case.inputs['max-k'] }}
+          reset-ports: ${{ matrix.case.inputs['reset-ports'] }}
+          reset-cycles: ${{ matrix.case.inputs['reset-cycles'] }}
+          liberty-files: ${{ matrix.case.inputs['liberty-files'] }}
+          artifact-dir: .artifacts/cases/${{ matrix.case.name }}
+
+      - name: Check the outputs
+        env:
+          STEP_OUTCOME: ${{ steps.action.outcome }}
+          OUT_STATUS: ${{ steps.action.outputs.status }}
+          OUT_VERDICT: ${{ steps.action.outputs.verdict }}
+          OUT_EXIT_CODE: ${{ steps.action.outputs.exit-code }}
+          OUT_DESIGN1_TOP: ${{ steps.action.outputs.design1-top }}
+          OUT_DESIGN2_TOP: ${{ steps.action.outputs.design2-top }}
+          OUT_ARTIFACT_DIR: ${{ steps.action.outputs.artifact-dir }}
+        run: python3 tests/check_case.py "${{ matrix.case.name }}"
+
+      - if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: self-test-${{ matrix.case.name }}
+          path: .artifacts/cases/${{ matrix.case.name }}
+          if-no-files-found: warn
+
+  result:
+    # Single stable check name for branch protection.
+    name: Action self-test
+    if: always()
+    needs: [unit, cases, self-test]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - env:
+          UNIT: ${{ needs.unit.result }}
+          CASES: ${{ needs.cases.result }}
+          SELF_TEST: ${{ needs.self-test.result }}
+        run: |
+          echo "unit tests: $UNIT, case list: $CASES, self-test: $SELF_TEST"
+          test "$UNIT" = success && test "$CASES" = success && test "$SELF_TEST" = success

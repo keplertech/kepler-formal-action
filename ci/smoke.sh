@@ -60,6 +60,24 @@ run_case inputs-operator-mismatch-sec 3 \
   "INPUT_DESIGN2=$cases/operator-mismatch-basic/latest/*.sv" \
   INPUT_MODE=sec INPUT_SEC_ENGINE=k_induction INPUT_MAX_K=4
 run_case inputs-missing-design 64 INPUT_DESIGN1=$cases/dff-sync/reference/top.sv
+
+fixtures=tests/fixtures
+run_case inputs-top-not-found 64 \
+  "INPUT_DESIGN1=$fixtures/wrapper/base/*.v" "INPUT_DESIGN2=$fixtures/wrapper/head/*.v" \
+  INPUT_TOP=foo INPUT_MODE=sec INPUT_SEC_ENGINE=pdr INPUT_RESET_PORTS=arst_i=1
+run_case inputs-top-inferred 0 \
+  "INPUT_DESIGN1=$fixtures/wrapper/base/*.v" "INPUT_DESIGN2=$fixtures/wrapper/head/*.v" \
+  INPUT_MODE=sec INPUT_SEC_ENGINE=pdr INPUT_SEC_ENCODING=binary INPUT_RESET_PORTS=arst_i=1
+run_case inputs-top-ambiguous 64 \
+  "INPUT_DESIGN1=$fixtures/two_tops/*.v" "INPUT_DESIGN2=$fixtures/two_tops/*.v" INPUT_MODE=sec
+run_case inputs-renamed-top 0 \
+  "INPUT_DESIGN1=$fixtures/renamed/base/*.v" "INPUT_DESIGN2=$fixtures/renamed/head/*.v" INPUT_MODE=sec
+run_case inputs-glob-no-match 64 \
+  "INPUT_DESIGN1=$fixtures/does-not-exist/*.v" "INPUT_DESIGN2=$fixtures/wrapper/head/*.v"
+run_case inputs-empty-reset-ports 2 \
+  "INPUT_DESIGN1=$fixtures/wrapper/base/*.v" "INPUT_DESIGN2=$fixtures/wrapper/head/*.v" \
+  INPUT_TOP=foo_ca INPUT_MODE=sec INPUT_SEC_ENGINE=pdr INPUT_SEC_ENCODING=binary \
+  INPUT_RESET_PORTS= INPUT_RESET_CYCLES=4
 run_case config-outside-workspace 64 INPUT_CONFIG_PATH=../outside.yaml
 
 if [[ $failures -ne 0 ]]; then
