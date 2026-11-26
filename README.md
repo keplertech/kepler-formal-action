@@ -87,13 +87,13 @@ and so is a Liberty library combined with SystemVerilog input.
 | `design1` | | Reference design: files or globs, separated by spaces or newlines. |
 | `design2` | | Implementation design, same form. |
 | `format` | `systemverilog` | `systemverilog`, `verilog` (gate-level), `vhdl` or `naja_if`. |
-| `top` | | Top module of both designs; inferred when empty. |
-| `design1-top`, `design2-top` | | Per-design top, when the names differ. |
+| `top` | | Top module of both designs; inferred when empty (see [Top module](#top-module)). |
+| `design1-top`, `design2-top` | | Per-design top, when the names differ; overrides `top`. |
 | `mode` | `lec` | `lec` or `sec`. |
 | `sec-engine` | | `pdr`, `k_induction` or `imc`. |
 | `sec-encoding` | | `binary` or `dual_rail_steady`. |
 | `max-k` | | SEC bound. |
-| `reset-ports` | | SEC reset bootstrap: `<port>=<active value>` pairs, e.g. `arst_i=1 cke_i=0`. |
+| `reset-ports` | | SEC reset bootstrap: `<port>=<active value>` pairs, e.g. `arst_i=1 cke_i=0`. Empty (`''`) means no bootstrap. |
 | `reset-cycles` | `4` | Reset bootstrap length when `reset-ports` is set. |
 | `liberty-files` | | Liberty files for gate-level Verilog. |
 | `artifact-dir` | `.kepler-formal-action` | Workspace-relative directory for logs and results. |
@@ -105,11 +105,52 @@ and so is a Liberty library combined with SystemVerilog input.
 
 | Output | Description |
 | --- | --- |
-| `verdict` | `equivalent`, `different`, `partially_proved`, `inconclusive`, `unsupported`, `invalid_input` or `error`. |
-| `exit-code` | `0` equivalent, `1` different (LEC) or partially proved, `2` inconclusive/unsupported, `3` counterexample (SEC), `64` invalid input, `70` error. |
-| `status` | `success` when proved equivalent, `failure` otherwise. |
+| `verdict` | See [Verdicts](#verdicts). |
+| `exit-code` | `0` equivalent, `1` different (LEC) or partially proved, `2` inconclusive/unsupported, `3` counterexample (SEC), `64` invalid input (including `top_not_found`, `top_ambiguous`), `70` error. |
+| `status` | `success` when proved equivalent, `failure` otherwise, like the step outcome. Use `verdict` or `exit-code` to tell a result from a run that could not verify. |
+| `design1-top`, `design2-top` | Top module used for each design, given or inferred; empty when it could not be resolved. |
 | `artifact-dir` | Workspace-relative artifact directory. |
 | `kepler-formal-version` | Installed kepler-formal version. |
+
+### Verdicts
+
+| Verdict | Status | Exit code | Meaning |
+| --- | --- | --- | --- |
+| `equivalent` | `success` | 0 | Proved equivalent. |
+| `different` | `failure` | 1 (LEC), 3 (SEC) | Not equivalent; the counterexample is in the summary and the log. |
+| `partially_proved` | `failure` | 1 | Some outputs proved, no difference found. |
+| `inconclusive`, `unsupported` | `failure` | 2 | No verdict from the engine; the reason is in the summary. |
+| `top_not_found` | `failure` | 64 | The top module given (or the only candidate) is not defined in the design files. The message names the missing module and lists the modules found. |
+| `top_ambiguous` | `failure` | 64 | No top given and several modules are not instantiated by any other one. The message lists the candidates. |
+| `invalid_input` | `failure` | 64 | Invalid input or config, for example a `design1`/`design2` glob that matches no file. The message names the input. |
+| `error` | `failure` | 70 | Design loading or internal error. The message is in the summary and `result.json`. |
+
+`status` follows the GitHub Actions step outcome: `success` or `failure`.
+The last four verdicts (exit codes 64 and 70) mean that no verification ran:
+branch on `verdict` or `exit-code` to report them differently from a
+counterexample.
+
+## Top module
+
+For Verilog and SystemVerilog sources, the action reads the module
+declarations and instantiations of each design (following `` `include``
+files) before the engine runs:
+
+- With `top` (or `design1-top` / `design2-top`), the module must be defined in
+  that design's files. Otherwise the step fails with verdict `top_not_found`,
+  for example: ``design1: top module `iob_reg` (from `top`) is not defined in
+  the design1 files. Modules found: `iob_reg_ca`, ...`` (with the
+  top-level candidates).
+- Without a top, each design's top is the one module that no other module of
+  that design instantiates. None or several fail with `top_not_found` or
+  `top_ambiguous`, listing the candidates.
+- The two designs may end up with different top names: the check still runs
+  (ports are matched by name) and the summary notes both names.
+
+The chosen tops are in the `design1-top` / `design2-top` outputs, the summary
+and `result.json`. VHDL, `naja_if`, file lists (`sv_design*_flist`) and
+sources whose module names come from macros are left to the frontend, as
+before.
 
 To expect a difference (for example to document an intended behavior change),
 use `continue-on-error: true` and check `steps.<id>.outputs.verdict`.
@@ -120,6 +161,14 @@ use `continue-on-error: true` and check `steps.<id>.outputs.verdict`.
 - `kepler-formal-engine.log`: the engine's own log file.
 - `summary.md`: the step summary.
 - `result.txt` / `result.json`: verdict, exit code, output coverage and timing.
+  `result.json` is written for every run, including errors, with the fields
+  `verdict`, `exit_code`, `verification`, `bound`, `reason`,
+  `covered_outputs`, `total_outputs`, `proven_outputs`, `elapsed_seconds`
+  (unchanged; `null` when no verification ran) and `status`, `mode`,
+  `design1_top`, `design2_top`, `top_source` (`input`, `inferred` or
+  `frontend`), `reset_ports`, `reset_cycles`, `error`, `error_details` (the
+  modules and candidates for top errors), `kepler_formal_version`,
+  `najaeda_version`.
 - `request.json`: the resolved designs and options.
 - `config.yaml`: a copy of the config, when `config-path` is used.
 - `work/`: working files of the engine and frontends (diagnostics, miter logs).
@@ -128,13 +177,29 @@ use `continue-on-error: true` and check `steps.<id>.outputs.verdict`.
 
 ```bash
 python3 -m venv .venv
-.venv/bin/pip install kepler-formal==1.0.0 PyYAML
-PYTHON=.venv/bin/python ci/smoke.sh
+.venv/bin/pip install kepler-formal==1.0.0 PyYAML pytest
+.venv/bin/python -m pytest tests -v       # unit tests + every self-test case
+PYTHON=.venv/bin/python ci/smoke.sh       # exit-code smoke matrix
 ```
 
-`ci/smoke.sh` is the canonical fixture matrix (`testdata/`); the
-`smoke-test` workflow runs it on Linux x86_64, Linux arm64 and macOS, and
-exercises the action contract through `uses: ./`.
+Tests:
+
+- `tests/test_unit.py`: plain logic, no engine needed (top selection, glob
+  expansion, argument building, `result.json`, summary).
+  `pytest tests/test_unit.py` runs without kepler-formal installed.
+- `tests/cases.json`: the self-test cases, with small Verilog fixtures under
+  `tests/fixtures/`. Each case lists the action inputs and the expected
+  `status`, `verdict`, `exit-code`, `design1-top`, `design2-top`, `result.json`
+  fields and summary/error phrases. `tests/test_cases.py` runs them locally
+  through `kepler_formal_action.py`; the `test` workflow runs them through
+  `uses: ./` and checks them with `tests/check_case.py`.
+- `ci/smoke.sh`: exit codes of the `testdata/` fixtures; the `smoke-test`
+  workflow runs it on Linux x86_64, Linux arm64 and macOS.
+
+The `test` workflow runs on every pull request and every push to `main`.
+Require its `Action self-test` check in the branch protection of `main` so a
+regression blocks merging. To add a case, add fixtures under `tests/fixtures/`
+and an entry to `tests/cases.json`; both runners pick it up.
 
 To move to a new kepler-formal release, change the `kepler-formal-version`
 default in `action.yml` (the workflow reads it from there), run the smoke

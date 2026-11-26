@@ -1,0 +1,252 @@
+{
+  "_comment": "Action self-test cases. Each case runs the action (uses: ./ in .github/workflows/test.yml, kepler_formal_action.py in tests/test_cases.py) with `inputs`, then tests/check_case.py checks the outputs, result.json and summary.md against `expect`. Inputs not listed are passed as empty strings, as in a workflow.",
+  "cases": [
+    {
+      "name": "top-not-found",
+      "description": "top names a module that is not in the design (py2hwsw iob_reg generates iob_reg_ca)",
+      "inputs": {
+        "design1": "tests/fixtures/wrapper/base/*.v",
+        "design2": "tests/fixtures/wrapper/head/*.v",
+        "top": "foo",
+        "mode": "sec",
+        "sec-engine": "pdr",
+        "sec-encoding": "binary",
+        "reset-ports": "arst_i=1",
+        "reset-cycles": "4"
+      },
+      "expect": {
+        "status": "failure",
+        "verdict": "top_not_found",
+        "exit-code": "64",
+        "design1-top": "",
+        "design2-top": "",
+        "error_contains": ["`foo`", "foo_ca", "foo_reg", "top"],
+        "summary_contains": ["top_not_found", "`foo`", "foo_ca"],
+        "result": {"status": "failure", "verdict": "top_not_found", "exit_code": 64}
+      }
+    },
+    {
+      "name": "top-inferred",
+      "description": "no top: the module nobody instantiates (foo_ca) is picked on both sides",
+      "inputs": {
+        "design1": "tests/fixtures/wrapper/base/*.v",
+        "design2": "tests/fixtures/wrapper/head/*.v",
+        "mode": "sec",
+        "sec-engine": "pdr",
+        "sec-encoding": "binary",
+        "reset-ports": "arst_i=1",
+        "reset-cycles": "4"
+      },
+      "expect": {
+        "status": "success",
+        "verdict": "equivalent",
+        "exit-code": "0",
+        "design1-top": "foo_ca",
+        "design2-top": "foo_ca",
+        "summary_contains": ["`foo_ca`", "inferred"],
+        "result": {
+          "status": "success",
+          "verdict": "equivalent",
+          "exit_code": 0,
+          "design1_top": "foo_ca",
+          "design2_top": "foo_ca",
+          "top_source": "inferred",
+          "error": null
+        }
+      }
+    },
+    {
+      "name": "top-ambiguous",
+      "description": "no top and two unrelated modules: clear error listing both candidates",
+      "inputs": {
+        "design1": "tests/fixtures/two_tops/*.v",
+        "design2": "tests/fixtures/two_tops/*.v",
+        "mode": "sec",
+        "sec-engine": "pdr",
+        "sec-encoding": "binary",
+        "reset-cycles": "4"
+      },
+      "expect": {
+        "status": "failure",
+        "verdict": "top_ambiguous",
+        "exit-code": "64",
+        "design1-top": "",
+        "design2-top": "",
+        "error_contains": ["alpha", "beta", "top"],
+        "summary_contains": ["top_ambiguous", "alpha", "beta"],
+        "result": {"status": "failure", "verdict": "top_ambiguous", "exit_code": 64}
+      }
+    },
+    {
+      "name": "renamed-top",
+      "description": "base and head tops have different names but the same ports: the check runs",
+      "inputs": {
+        "design1": "tests/fixtures/renamed/base/*.v",
+        "design2": "tests/fixtures/renamed/head/*.v",
+        "mode": "sec",
+        "sec-engine": "pdr",
+        "sec-encoding": "binary",
+        "reset-cycles": "4"
+      },
+      "expect": {
+        "status": "success",
+        "verdict": "equivalent",
+        "exit-code": "0",
+        "design1-top": "bar_old",
+        "design2-top": "bar_new",
+        "summary_contains": ["`bar_old`", "`bar_new`", "differ"],
+        "result": {
+          "verdict": "equivalent",
+          "design1_top": "bar_old",
+          "design2_top": "bar_new"
+        }
+      }
+    },
+    {
+      "name": "glob-no-match",
+      "description": "a design1 glob that matches no file: error naming design1",
+      "inputs": {
+        "design1": "tests/fixtures/does-not-exist/*.v",
+        "design2": "tests/fixtures/wrapper/head/*.v",
+        "mode": "sec",
+        "sec-engine": "pdr",
+        "reset-cycles": "4"
+      },
+      "expect": {
+        "status": "failure",
+        "verdict": "invalid_input",
+        "exit-code": "64",
+        "design1-top": "",
+        "design2-top": "",
+        "error_contains": ["design1", "tests/fixtures/does-not-exist/*.v"],
+        "summary_contains": ["design1", "does-not-exist"],
+        "result": {"status": "failure", "verdict": "invalid_input", "exit_code": 64}
+      }
+    },
+    {
+      "name": "empty-reset-ports",
+      "description": "reset-ports '' with reset-cycles '4': no reset bootstrap, the check still runs (unsupported: the registers are not reset-anchored)",
+      "inputs": {
+        "design1": "tests/fixtures/wrapper/base/*.v",
+        "design2": "tests/fixtures/wrapper/head/*.v",
+        "top": "foo_ca",
+        "mode": "sec",
+        "sec-engine": "pdr",
+        "sec-encoding": "binary",
+        "reset-ports": "",
+        "reset-cycles": "4"
+      },
+      "expect": {
+        "status": "failure",
+        "verdict": "unsupported",
+        "exit-code": "2",
+        "design1-top": "foo_ca",
+        "design2-top": "foo_ca",
+        "summary_contains": ["Reset bootstrap: none", "No aligned observed outputs"],
+        "result": {
+          "status": "failure",
+          "verdict": "unsupported",
+          "exit_code": 2,
+          "verification": "sec",
+          "reset_ports": [],
+          "reset_cycles": null,
+          "covered_outputs": 0,
+          "total_outputs": 4
+        }
+      }
+    },
+    {
+      "name": "reset-bootstrap",
+      "description": "arst_i=1 in reset-ports: the reset bootstrap is applied and the designs are proved equivalent",
+      "inputs": {
+        "design1": "tests/fixtures/wrapper/base/*.v",
+        "design2": "tests/fixtures/wrapper/head/*.v",
+        "top": "foo_ca",
+        "mode": "sec",
+        "sec-engine": "pdr",
+        "sec-encoding": "binary",
+        "reset-ports": "arst_i=1",
+        "reset-cycles": "4"
+      },
+      "expect": {
+        "status": "success",
+        "verdict": "equivalent",
+        "exit-code": "0",
+        "design1-top": "foo_ca",
+        "design2-top": "foo_ca",
+        "summary_contains": ["Reset bootstrap: arst_i=1 for 4 cycles"],
+        "result": {
+          "status": "success",
+          "verdict": "equivalent",
+          "exit_code": 0,
+          "verification": "sec",
+          "reset_ports": [{"name": "arst_i", "active_value": true}],
+          "reset_cycles": 4,
+          "covered_outputs": 4,
+          "total_outputs": 4,
+          "top_source": "input"
+        }
+      }
+    },
+    {
+      "name": "existing-equivalent",
+      "description": "unchanged behavior: SEC with a reset bootstrap proves equivalent",
+      "inputs": {
+        "design1": "testdata/systemverilog/cases/dff-async-reset/reference/*.sv",
+        "design2": "testdata/systemverilog/cases/dff-async-reset/latest/*.sv",
+        "top": "top",
+        "mode": "sec",
+        "sec-engine": "pdr",
+        "reset-ports": "rst_n=0",
+        "reset-cycles": "2"
+      },
+      "expect": {
+        "status": "success",
+        "verdict": "equivalent",
+        "exit-code": "0",
+        "design1-top": "top",
+        "design2-top": "top",
+        "summary_contains": ["**equivalent**", "Checked outputs: 5/5"],
+        "result": {
+          "verdict": "equivalent",
+          "exit_code": 0,
+          "verification": "sec",
+          "covered_outputs": 5,
+          "total_outputs": 5
+        },
+        "result_keys": ["verdict", "exit_code", "verification", "bound", "reason", "covered_outputs", "total_outputs", "proven_outputs", "elapsed_seconds"]
+      }
+    },
+    {
+      "name": "existing-different",
+      "description": "unchanged behavior: a SEC counterexample fails with verdict different and the trace in the summary",
+      "inputs": {
+        "design1": "testdata/systemverilog/cases/operator-mismatch-basic/reference/top.sv",
+        "design2": "testdata/systemverilog/cases/operator-mismatch-basic/latest/top.sv",
+        "mode": "sec"
+      },
+      "expect": {
+        "status": "failure",
+        "verdict": "different",
+        "exit-code": "3",
+        "summary_contains": ["**different**", "Input trace"],
+        "result": {"verdict": "different", "exit_code": 3, "verification": "sec"},
+        "result_keys": ["verdict", "exit_code", "verification", "bound", "reason", "covered_outputs", "total_outputs", "proven_outputs", "elapsed_seconds"]
+      }
+    },
+    {
+      "name": "existing-config",
+      "description": "unchanged behavior: a kepler-formal YAML config still works",
+      "inputs": {
+        "config-path": "testdata/verilog/configs/equivalent.yaml"
+      },
+      "expect": {
+        "status": "success",
+        "verdict": "equivalent",
+        "exit-code": "0",
+        "summary_contains": ["**equivalent**", "Config:"],
+        "result": {"verdict": "equivalent", "exit_code": 0, "verification": "lec"}
+      }
+    }
+  ]
+}

@@ -22,15 +22,20 @@ inputs:
     required: false
     default: systemverilog
   top:
-    description: Top module of both designs. Inferred when empty.
+    description: >-
+      Top module of both designs. When empty, each design's top is the one
+      module that no other module of that design instantiates (Verilog and
+      SystemVerilog); the step fails with verdict top_ambiguous when several
+      modules qualify. A top that is not defined in the design files fails with
+      verdict top_not_found before the engine runs.
     required: false
     default: ''
   design1-top:
-    description: Top module of design1, when it differs from top.
+    description: Top module of design1, when it differs from top. Overrides top.
     required: false
     default: ''
   design2-top:
-    description: Top module of design2, when it differs from top.
+    description: Top module of design2, when it differs from top. Overrides top.
     required: false
     default: ''
   mode:
@@ -53,7 +58,8 @@ inputs:
     description: >-
       SEC reset bootstrap: space-separated <port>=<active value> pairs, for
       example "arst_i=1 cke_i=0". Each port is held at its active value for
-      reset-cycles cycles, then at the opposite value.
+      reset-cycles cycles, then at the opposite value. Empty (the default, or
+      '') means no reset bootstrap; reset-cycles is then ignored.
     required: false
     default: ''
   reset-cycles:
@@ -92,14 +98,28 @@ outputs:
   exit-code:
     description: >-
       0 equivalent, 1 different (LEC) or partially proved, 2 inconclusive,
-      3 counterexample (SEC), 64 invalid input, 70 error.
+      3 counterexample (SEC), 64 invalid input (including top_not_found and
+      top_ambiguous), 70 error.
     value: ${{ steps.run.outputs.exit-code }}
   status:
-    description: success when the designs were proved equivalent, failure otherwise.
+    description: >-
+      success when the designs were proved equivalent, failure otherwise
+      (like the step outcome). The verdict and exit-code outputs tell a
+      verification result from a run that could not verify (exit code 64 or
+      70).
     value: ${{ steps.run.outputs.status }}
   verdict:
-    description: equivalent, different, partially_proved, inconclusive, unsupported, invalid_input or error.
+    description: >-
+      equivalent, different, partially_proved, inconclusive or unsupported when
+      the engine ran; top_not_found, top_ambiguous, invalid_input or error
+      otherwise.
     value: ${{ steps.run.outputs.verdict }}
+  design1-top:
+    description: Top module used for design1 (given or inferred); empty when it could not be resolved.
+    value: ${{ steps.run.outputs.design1-top }}
+  design2-top:
+    description: Top module used for design2 (given or inferred); empty when it could not be resolved.
+    value: ${{ steps.run.outputs.design2-top }}
   kepler-formal-version:
     description: Installed kepler-formal version.
     value: ${{ steps.run.outputs.kepler-formal-version }}
