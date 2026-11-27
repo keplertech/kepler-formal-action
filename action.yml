@@ -39,9 +39,13 @@ inputs:
     required: false
     default: ''
   mode:
-    description: lec (combinational) or sec (sequential).
+    description: >-
+      sec (sequential, the default) or lec (combinational). SEC compares the
+      designs cycle by cycle from reset and tolerates register renaming,
+      retiming and re-encoding; LEC pairs registers by name and suits only
+      designs whose registers correspond one to one.
     required: false
-    default: lec
+    default: sec
   sec-engine:
     description: SEC engine (pdr, k_induction or imc). Engine default when empty.
     required: false
