@@ -1,4 +1,5 @@
 format: verilog
+verification: lec
 input_paths:
   - testdata/verilog/cases/equivalent-basic/latest/top.v
   - testdata/verilog/cases/equivalent-basic/reference/top.v

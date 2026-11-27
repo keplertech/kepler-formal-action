@@ -66,6 +66,9 @@ input_paths:
   - [head/src/a.v, head/src/b.v]
 ```
 
+A config without `verification` runs SEC in the action, while the kepler-formal
+executable runs LEC. Set `verification: lec` to keep LEC.
+
 Relative paths in a config are resolved against the workspace. The action
 supports these config keys: `format`, `design1_format`, `design2_format`,
 `verification`, `max_k`, `sec_engine`, `sec_encoding`, `solver`, `sec_reset`,
@@ -79,6 +82,23 @@ always goes to the artifact directory). Other keys of the executable (Python
 designs or primitives, `sv2v`, CNF exports, scopes) are rejected with an error,
 and so is a Liberty library combined with SystemVerilog input.
 
+### Choosing a mode
+
+The action runs SEC (sequential equivalence) unless `mode` or `verification`
+says otherwise.
+
+- **SEC** compares the two designs cycle by cycle from reset. It tolerates
+  renamed, retimed or re-encoded registers, so it fits comparing RTL revisions
+  (pull requests, refactors, history replays). Give the reset ports with
+  `reset-ports` (or `sec_reset`) so both designs start from a known state.
+  Outputs whose logic spans several clock domains are skipped. The run then
+  ends `partially_proved` (exit 1); set `report_skipped_pos: true` in a config
+  to list the skipped outputs.
+- **LEC** (combinational equivalence) pairs registers by name and proves the
+  logic between them. It is faster, but it suits only designs whose registers
+  correspond one to one, for example a netlist against the RTL it came from.
+  Between RTL revisions it often stops on a boundary mismatch.
+
 ## Inputs
 
 | Input | Default | Description |
@@ -89,7 +109,7 @@ and so is a Liberty library combined with SystemVerilog input.
 | `format` | `systemverilog` | `systemverilog`, `verilog` (gate-level), `vhdl` or `naja_if`. |
 | `top` | | Top module of both designs; inferred when empty (see [Top module](#top-module)). |
 | `design1-top`, `design2-top` | | Per-design top, when the names differ; overrides `top`. |
-| `mode` | `lec` | `lec` or `sec`. |
+| `mode` | `sec` | `sec` or `lec`; see [Choosing a mode](#choosing-a-mode). |
 | `sec-engine` | | `pdr`, `k_induction` or `imc`. |
 | `sec-encoding` | | `binary` or `dual_rail_steady`. |
 | `max-k` | | SEC bound. |

@@ -247,6 +247,55 @@
         "summary_contains": ["**equivalent**", "Config:"],
         "result": {"verdict": "equivalent", "exit_code": 0, "verification": "lec"}
       }
+    },
+    {
+      "name": "default-mode-inputs",
+      "description": "no mode input: the action runs SEC",
+      "inputs": {
+        "design1": "testdata/systemverilog/cases/dff-async-reset/reference/*.sv",
+        "design2": "testdata/systemverilog/cases/dff-async-reset/latest/*.sv",
+        "top": "top",
+        "reset-ports": "rst_n=0",
+        "reset-cycles": "2"
+      },
+      "expect": {
+        "status": "success",
+        "verdict": "equivalent",
+        "exit-code": "0",
+        "summary_contains": ["**equivalent**", "Mode: sec"],
+        "result": {"verdict": "equivalent", "exit_code": 0, "verification": "sec", "mode": "sec"}
+      }
+    },
+    {
+      "name": "default-mode-config",
+      "description": "a config without verification: the action runs SEC",
+      "inputs": {
+        "config-path": "testdata/systemverilog/configs/procedural-comb.yaml"
+      },
+      "expect": {
+        "status": "success",
+        "verdict": "equivalent",
+        "exit-code": "0",
+        "summary_contains": ["**equivalent**", "Mode: sec"],
+        "result": {"verdict": "equivalent", "exit_code": 0, "verification": "sec", "mode": "sec"}
+      }
+    },
+    {
+      "name": "lec-explicit",
+      "description": "mode lec still runs combinational LEC, and a difference exits with 1",
+      "inputs": {
+        "design1": "testdata/verilog/cases/mismatch-basic/reference/top.v",
+        "design2": "testdata/verilog/cases/mismatch-basic/latest/top.v",
+        "format": "verilog",
+        "mode": "lec"
+      },
+      "expect": {
+        "status": "failure",
+        "verdict": "different",
+        "exit-code": "1",
+        "summary_contains": ["**different**", "Mode: lec"],
+        "result": {"verdict": "different", "exit_code": 1, "verification": "lec", "mode": "lec"}
+      }
     }
   ]
 }

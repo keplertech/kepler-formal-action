@@ -50,6 +50,11 @@ EXIT_COUNTEREXAMPLE_SEC = 3
 EXIT_USAGE = 64
 EXIT_INTERNAL = 70
 
+# The action runs SEC unless told otherwise, for direct inputs and configs alike
+# (the kepler-formal executable itself still defaults to LEC). SEC compares the
+# designs from reset; LEC pairs registers by name, which breaks between RTL revisions.
+DEFAULT_MODE = "sec"
+
 # The step summary has a 1 MiB limit; the full trace stays in kepler-formal.log.
 SUMMARY_REASON_LIMIT = 30000
 
@@ -542,7 +547,7 @@ def request_from_config(config_path: Path, workspace: Path) -> dict:
         ),
         "liberty_files": [_design_path(workspace, f) for f in cfg.get("liberty_files") or []],
         "options": {
-            "mode": str(cfg.get("verification", "lec")).lower(),
+            "mode": str(cfg.get("verification", DEFAULT_MODE)).lower(),
             "solver": cfg.get("solver", "kissat"),
             "max_k": _positive_int(cfg["max_k"], "max_k") if "max_k" in cfg else None,
             "sec_engine": cfg.get("sec_engine"),
@@ -591,7 +596,7 @@ def request_from_inputs(env: dict, workspace: Path) -> dict:
         tops.append(own or top)
         top_inputs.append(f"design{index}-top" if own else "top")
 
-    mode = (env.get("INPUT_MODE") or "lec").strip().lower()
+    mode = (env.get("INPUT_MODE") or DEFAULT_MODE).strip().lower()
     reset_ports = _reset_ports(env.get("INPUT_RESET_PORTS", ""))
     reset_cycles = None
     if reset_ports:
